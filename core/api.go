@@ -1,6 +1,13 @@
 package core
 
-import "time"
+import (
+	"errors"
+	"net"
+	"syscall"
+	"time"
+
+	"golang.org/x/sys/unix"
+)
 
 // 枚举变量状态有可写，写读
 type State uint32
@@ -27,4 +34,79 @@ type PollingApi interface {
 	Poll(tv time.Duration, cb func(int, State, error)) (retVal int, err error)
 	Free()
 	Name() string
+	Dial(network, addr string) (fd int, err error)
+	Accept(network, addr string) error
+}
+
+func (e *eventPollState) Dial(network, addr string) (fd int, err error) {
+	c, err := net.Dial(network, addr)
+	if err != nil {
+		return 0, err
+	}
+
+	fd, err = getFdFromConn(c)
+	if err != nil {
+		return 0, err
+	}
+
+	err = e.AddRead(fd)
+	if err != nil {
+		return 0, err
+	}
+
+	return fd, nil
+}
+
+// Accpet事件
+func (e *eventPollState) Accept(network, addr string) error {
+	l, err := net.Listen(network, addr)
+	if err != nil {
+		return err
+	}
+
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			time.Sleep(time.Second * 1)
+			continue
+		}
+
+		fd, err := getFdFromConn(c)
+		if err != nil {
+			return err
+		}
+
+		err = e.AddRead(fd)
+		if err != nil {
+			return err
+		}
+	}
+
+}
+
+// 复制一份socket
+func getFdFromConn(c net.Conn) (newFd int, err error) {
+	sc, ok := c.(interface {
+		SyscallConn() (syscall.RawConn, error)
+	})
+	if !ok {
+		return 0, errors.New("RawConn Unsupported")
+	}
+	rc, err := sc.SyscallConn()
+	if err != nil {
+		return 0, errors.New("RawConn Unsupported")
+	}
+
+	err = rc.Control(func(fd uintptr) {
+		newFd = int(fd)
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return duplicateSocket(int(newFd))
+}
+
+func duplicateSocket(socketFD int) (int, error) {
+	return unix.Dup(socketFD)
 }

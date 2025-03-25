@@ -32,16 +32,15 @@ type eventPollState struct {
 	events []unix.Kevent_t
 }
 
-func Create() (as *eventPollState, err error) {
+func Create() (as PollingApi, err error) {
 	var state eventPollState
 	state.kqfd, err = unix.Kqueue()
 	if err != nil {
 		return nil, err
 	}
-	as = &state
-	as.events = make([]unix.Kevent_t, 1024)
+	state.events = make([]unix.Kevent_t, 1024)
 
-	return as, nil
+	return &state, nil
 }
 
 // 新加读事件

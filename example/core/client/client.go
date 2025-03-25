@@ -1,11 +1,46 @@
 package main
 
-import "github.com/antlabs/pulse/core"
+import (
+	"fmt"
+	"reflect"
+	"time"
+
+	"github.com/antlabs/pulse/core"
+	"golang.org/x/sys/unix"
+)
+
+func printSize(iface interface{}) bool {
+	val := reflect.ValueOf(iface)
+	return val.Type() == reflect.TypeOf(struct{}{})
+}
+
+type handler struct{}
 
 func main() {
+
+	fmt.Println(printSize(handler{}))
 	as, err := core.Create()
 	if err != nil {
 		return
 	}
-	as.AddRead()
+	// 使用示例文件描述符 0 (标准输入)
+	fd, err := as.Dial("tcp", "127.0.0.1:8080")
+	if err != nil {
+		return
+	}
+
+	unix.Write(fd, []byte("hello"))
+	as.Poll(time.Second*10, func(fd int, state core.State, err error) {
+		if err != nil {
+			return
+		}
+
+		if state&core.READ != 0 {
+
+		}
+
+		if state&core.WRITE != 0 {
+
+		}
+	})
 }
