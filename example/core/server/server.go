@@ -1,9 +1,12 @@
 package main
 
 import (
-	"time"
+	"errors"
+	"io"
+	"log/slog"
 
 	"github.com/antlabs/pulse/core"
+	"golang.org/x/sys/unix"
 )
 
 func main() {
@@ -15,16 +18,44 @@ func main() {
 	// 使用示例文件描述符 0 (标准输入)
 	go as.Accept("tcp", "127.0.0.1:8080")
 
-	as.Poll(time.Second*10, func(fd int, state core.State, err error) {
-		if err != nil {
-			return
-		}
-		if state&core.READ != 0 {
+	for {
 
-		}
+		as.Poll(-1, func(fd int, state core.State, err error) {
+			slog.Info("poll", "fd", fd, "state", state.String(), "err", err)
+			if err != nil {
+				if errors.Is(err, unix.EAGAIN) {
+					return
+				}
+				if errors.Is(err, io.EOF) {
+					unix.Close(fd)
+				}
+				unix.Close(fd)
+				return
+			}
 
-		if state&core.WRITE != 0 {
+			if state.IsRead() {
+				var buf [1024]byte
+				for {
+					n, err := unix.Read(fd, buf[:])
+					if err != nil {
+						if errors.Is(err, unix.EAGAIN) {
+							return
+						}
+						unix.Close(fd)
+						return
+					}
+					if n > 0 {
+						// TODO 这里没有处理 EAGAIN
+						unix.Write(fd, buf[:n])
+					} else {
+						slog.Info("read", "fd", fd, "state", state.String(), "err", err)
+					}
+				}
+			}
 
-		}
-	})
+			if state.IsWrite() {
+				unix.Write(fd, []byte("hello client"))
+			}
+		})
+	}
 }

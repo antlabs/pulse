@@ -50,15 +50,32 @@ func (as *eventPollState) AddRead(fd int) error {
 	}
 
 	_, err := unix.Kevent(as.kqfd, []unix.Kevent_t{
-		{Ident: uint64(fd), Flags: unix.EV_ADD, Filter: unix.EVFILT_READ},
-		{Ident: uint64(fd), Flags: unix.EV_ADD, Filter: unix.EVFILT_WRITE},
+		{Ident: uint64(fd), Flags: unix.EV_ADD | unix.EV_CLEAR, Filter: unix.EVFILT_READ},
 	}, nil, nil)
 	return err
 }
 
 // 新加写事件
 func (as *eventPollState) AddWrite(fd int) error {
-	return nil
+	if fd == -1 {
+		return nil
+	}
+
+	_, err := unix.Kevent(as.kqfd, []unix.Kevent_t{
+		{Ident: uint64(fd), Flags: unix.EV_ADD | unix.EV_CLEAR, Filter: unix.EVFILT_WRITE},
+	}, nil, nil)
+	return err
+}
+
+func (as *eventPollState) ResetRead(fd int) error {
+	if fd == -1 {
+		return nil
+	}
+
+	_, err := unix.Kevent(as.kqfd, []unix.Kevent_t{
+		{Ident: uint64(fd), Flags: unix.EV_DELETE, Filter: unix.EVFILT_WRITE},
+	}, nil, nil)
+	return err
 }
 
 func (as *eventPollState) Del(fd int) error {
@@ -92,11 +109,6 @@ func (as *eventPollState) Poll(tv time.Duration, cb func(int, State, error)) (re
 			ev := &as.events[j]
 			fd := int(ev.Ident)
 
-			if ev.Flags&unix.EV_EOF != 0 {
-				cb(fd, WRITE, io.EOF)
-				continue
-			}
-
 			isRead := ev.Filter == unix.EVFILT_READ
 			isWrite := ev.Filter == unix.EVFILT_WRITE
 			if isRead {
@@ -110,6 +122,11 @@ func (as *eventPollState) Poll(tv time.Duration, cb func(int, State, error)) (re
 			if isWrite {
 				// 刷新下直接写入失败的数据
 				cb(fd, WRITE, nil)
+			}
+
+			if ev.Flags&unix.EV_EOF != 0 {
+				cb(fd, WRITE, io.EOF)
+				continue
 			}
 
 		}

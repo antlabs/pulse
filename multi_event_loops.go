@@ -18,6 +18,7 @@ func NewMultiEventLoop(options ...Options) (e *MultiEventLoop, err error) {
 			return nil, err
 		}
 	}
+
 	return &MultiEventLoop{
 		eventLoops: eventLoops,
 	}, nil

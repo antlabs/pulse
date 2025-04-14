@@ -90,7 +90,7 @@ func (e *eventPollState) Free() {
 
 // 新加读事件
 func (e *eventPollState) AddRead(fd int) error {
-	if e.rev > 0 {
+	if e.rev > 0 && fd >= 0 {
 		return unix.EpollCtl(e.epfd, unix.EPOLL_CTL_ADD, fd, &unix.EpollEvent{
 			Fd:     int32(fd),
 			Events: e.rev,
@@ -101,13 +101,23 @@ func (e *eventPollState) AddRead(fd int) error {
 
 // 新加写事件
 func (e *eventPollState) AddWrite(fd int) error {
-	if e.wev > 0 {
+	if e.wev > 0 && fd >= 0 {
 		return unix.EpollCtl(e.epfd, unix.EPOLL_CTL_MOD, fd, &unix.EpollEvent{
 			Fd:     int32(fd),
 			Events: e.wev,
 		})
 	}
 
+	return nil
+}
+
+func (e *eventPollState) ResetRead(fd int) error {
+	if e.resetEv > 0 && fd >= 0 {
+		return unix.EpollCtl(e.epfd, unix.EPOLL_CTL_MOD, fd, &unix.EpollEvent{
+			Fd:     int32(fd),
+			Events: e.resetEv,
+		})
+	}
 	return nil
 }
 

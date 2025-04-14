@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"net"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,6 +20,17 @@ const (
 	READ
 )
 
+func (s State) String() string {
+	var sb strings.Builder
+	if s.IsRead() {
+		sb.WriteString("READ")
+	}
+	if s.IsWrite() {
+		sb.WriteString("WRITE")
+	}
+	return sb.String()
+}
+
 func (s State) IsWrite() bool {
 	return s&WRITE != 0
 }
@@ -30,6 +42,7 @@ func (s State) IsRead() bool {
 type PollingApi interface {
 	AddRead(fd int) error
 	AddWrite(fd int) error
+	ResetRead(fd int) error
 	Del(fd int) error
 	Poll(tv time.Duration, cb func(int, State, error)) (retVal int, err error)
 	Free()
