@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 
 	"github.com/antlabs/pulse/core"
@@ -25,9 +24,6 @@ func main() {
 			if err != nil {
 				if errors.Is(err, unix.EAGAIN) {
 					return
-				}
-				if errors.Is(err, io.EOF) {
-					unix.Close(fd)
 				}
 				unix.Close(fd)
 				return
