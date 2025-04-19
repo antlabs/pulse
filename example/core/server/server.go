@@ -15,7 +15,7 @@ func main() {
 		return
 	}
 	// 使用示例文件描述符 0 (标准输入)
-	go as.Accept("tcp", "127.0.0.1:8080")
+	go core.Accept("tcp", "127.0.0.1:8080", as)
 
 	for {
 

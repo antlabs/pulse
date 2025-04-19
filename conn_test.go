@@ -2,6 +2,7 @@ package pulse
 
 import (
 	"fmt"
+	"net"
 	"testing"
 )
 
@@ -21,4 +22,9 @@ func Test_OnData(t *testing.T) {
 		),
 	}
 	handleData[[]byte](c, options, []byte("hello"))
+}
+
+func Test_Listen(t *testing.T) {
+	fmt.Println(net.Listen("tcp", "127.0.0.1:8080"))
+	fmt.Println(net.Listen("tcp", "127.0.0.1:8080"))
 }

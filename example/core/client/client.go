@@ -24,7 +24,7 @@ func main() {
 		return
 	}
 	// 使用示例文件描述符 0 (标准输入)
-	fd, err := as.Dial("tcp", "127.0.0.1:8080")
+	fd, err := core.Dial("tcp", "127.0.0.1:8080", as)
 	if err != nil {
 		return
 	}

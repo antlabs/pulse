@@ -14,7 +14,7 @@ type Callback[T any] interface {
 }
 
 type Decoder[T any] interface {
-	Decode(data []byte) (T, error)
+	Decode(data []byte) (T, []byte, error)
 }
 
 type toCallback[T any] struct {

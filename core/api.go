@@ -47,11 +47,10 @@ type PollingApi interface {
 	Poll(tv time.Duration, cb func(int, State, error)) (retVal int, err error)
 	Free()
 	Name() string
-	Dial(network, addr string) (fd int, err error)
-	Accept(network, addr string) error
 }
 
-func (e *eventPollState) Dial(network, addr string) (fd int, err error) {
+// dial 工具函数
+func Dial(network, addr string, e PollingApi) (fd int, err error) {
 	c, err := net.Dial(network, addr)
 	if err != nil {
 		return 0, err
@@ -70,8 +69,8 @@ func (e *eventPollState) Dial(network, addr string) (fd int, err error) {
 	return fd, nil
 }
 
-// Accpet事件
-func (e *eventPollState) Accept(network, addr string) error {
+// Accept 工具函数
+func Accept(network, addr string, e PollingApi) error {
 	l, err := net.Listen(network, addr)
 	if err != nil {
 		return err
