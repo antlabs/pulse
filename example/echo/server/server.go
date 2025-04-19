@@ -19,6 +19,7 @@ func (h *handler) OnOpen(c *pulse.Conn, err error) {
 
 func (h *handler) OnData(c *pulse.Conn, data []byte) {
 	fmt.Println("OnData:", string(data))
+	c.Write(data)
 }
 
 func (h *handler) OnClose(c *pulse.Conn, err error) {
@@ -31,12 +32,12 @@ func (h *handler) OnClose(c *pulse.Conn, err error) {
 
 func main() {
 
-	el, err := pulse.NewMultiEventLoop[[]byte](
+	el, err := pulse.NewMultiEventLoop(
 		pulse.WithCallback(&handler{}),
 	)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	el.ListenAndServe("")
+	el.ListenAndServe(":8080")
 }

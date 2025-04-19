@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net"
 	"runtime"
+	"sync"
+	"time"
 
 	"github.com/antlabs/pulse/core"
 	"golang.org/x/sys/unix"
@@ -24,23 +26,61 @@ func NewMultiEventLoop[T any](options ...func(*Options[T])) (e *MultiEventLoop[T
 		}
 	}
 
-	return &MultiEventLoop[T]{
+	e = &MultiEventLoop[T]{
 		eventLoops: eventLoops,
-	}, nil
+	}
+
+	for _, option := range options {
+		option(&e.options)
+	}
+
+	return e, nil
 }
 
 func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
+	slog.Debug("listenAndServe", "addr", addr)
 	var safeConns safeConns[Conn]
 	safeConns.init()
 
-	_, err := net.Listen("tcp", addr)
+	l, err := net.Listen("tcp", addr)
 	if err != nil {
+		slog.Error("listen", "err", err)
 		return err
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(1 + len(e.eventLoops))
+	defer wg.Wait()
+
+	go func() {
+		defer wg.Done()
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				// TODO 优化
+				time.Sleep(time.Second * 1)
+				continue
+			}
+
+			fd, err := core.GetFdFromConn(c)
+			if err != nil {
+				slog.Error("getFdFromConn", "err", err)
+				continue
+			}
+
+			index := fd % len(e.eventLoops)
+			err = e.eventLoops[index].AddRead(fd)
+			if err != nil {
+				slog.Error("addRead", "err", err)
+				continue
+			}
+		}
+	}()
 
 	for _, eventLoop := range e.eventLoops {
 		eventLoop := eventLoop
 		go func() {
+			defer wg.Done()
 			for {
 				eventLoop.Poll(-1, func(fd int, state core.State, err error) {
 
@@ -61,12 +101,17 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 					}
 
 					if state.IsRead() {
+						if c.rbuf == nil {
+							c.rbuf = getBytes(1024)
+						}
 						for {
 							// 循环读取数据
 							n, err := unix.Read(fd, *c.rbuf)
 							if err != nil {
 								// EAGAIN表示没有数据
 								if errors.Is(err, unix.EAGAIN) {
+									putBytes(c.rbuf)
+									c.rbuf = nil
 									return
 								}
 								// 如果不是这个错误直接关闭连接
@@ -75,7 +120,13 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 								return
 							}
 
-							handleData[T](c, &e.options, (*c.rbuf)[:n])
+							if n == 0 {
+								slog.Info("read 0 bytes", "fd", fd, "state", state.String(), "err", err)
+								unix.Close(fd)
+								safeConns.Del(fd)
+								break
+							}
+							handleData(c, &e.options, (*c.rbuf)[:n])
 						}
 					}
 

@@ -11,8 +11,8 @@ import (
 
 type Conn struct {
 	fd        int64
-	rbuf      *[]byte // read buffer
-	wbuf      *[]byte // write buffer
+	rbuf      *[]byte // read buffer, 为了更精细控制内存使用量
+	wbuf      *[]byte // write buffer, 为了理精细控制内存使用量
 	mu        sync.Mutex
 	safeConns *safeConns[Conn]
 }

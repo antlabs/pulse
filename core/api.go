@@ -56,7 +56,7 @@ func Dial(network, addr string, e PollingApi) (fd int, err error) {
 		return 0, err
 	}
 
-	fd, err = getFdFromConn(c)
+	fd, err = GetFdFromConn(c)
 	if err != nil {
 		return 0, err
 	}
@@ -83,7 +83,7 @@ func Accept(network, addr string, e PollingApi) error {
 			continue
 		}
 
-		fd, err := getFdFromConn(c)
+		fd, err := GetFdFromConn(c)
 		if err != nil {
 			return err
 		}
@@ -97,7 +97,7 @@ func Accept(network, addr string, e PollingApi) error {
 }
 
 // 复制一份socket
-func getFdFromConn(c net.Conn) (newFd int, err error) {
+func GetFdFromConn(c net.Conn) (newFd int, err error) {
 	sc, ok := c.(interface {
 		SyscallConn() (syscall.RawConn, error)
 	})
