@@ -5,8 +5,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
+
+var clocksPerSec = float64(100)
 
 // 获取 Linux 系统的 CPU 信息
 func GetCPUInfo() (CPUInfo, error) {
@@ -44,49 +45,13 @@ func GetProcessCPUInfo(pid int) (ProcessCPUInfo, error) {
 	totalTime := userTime + systemTime
 
 	return ProcessCPUInfo{
-		User:   userTime / sysconfClockTicks(),
-		System: systemTime / sysconfClockTicks(),
-		Total:  totalTime / sysconfClockTicks(),
+		User:   userTime,
+		System: systemTime,
+		Total:  totalTime,
 	}, nil
 }
 
 // 获取系统时钟频率（Linux）
 func sysconfClockTicks() float64 {
-	// 尝试通过 /proc/stat 推导时钟频率
-	ticks, err := calculateClockTicks()
-	if err != nil {
-		fmt.Println("Warning: Failed to calculate clock ticks. Using default value 100.")
-		return 100 // 默认值
-	}
-	return ticks
-}
-
-// 通过 /proc/stat 推导时钟频率
-func calculateClockTicks() (float64, error) {
-	// 第一次读取 /proc/stat
-	firstCPUInfo, err := GetCPUInfo()
-	if err != nil {
-		return 0, err
-	}
-	startTime := time.Now()
-
-	// 等待一段时间（例如 100 毫秒）
-	time.Sleep(100 * time.Millisecond)
-
-	// 第二次读取 /proc/stat
-	secondCPUInfo, err := GetCPUInfo()
-	if err != nil {
-		return 0, err
-	}
-	elapsedTime := time.Since(startTime).Seconds()
-
-	// 计算总 CPU 时间增量（以 jiffies 为单位）
-	cpuTimeDelta := secondCPUInfo.Total - firstCPUInfo.Total
-
-	// 计算时钟频率
-	if elapsedTime == 0 || cpuTimeDelta <= 0 {
-		return 0, fmt.Errorf("failed to calculate clock ticks")
-	}
-	clockTicks := cpuTimeDelta / elapsedTime
-	return clockTicks, nil
+	return clocksPerSec
 }

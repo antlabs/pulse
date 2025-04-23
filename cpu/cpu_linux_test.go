@@ -13,6 +13,10 @@ import (
 // This test is Linux-specific and simulates a CPU spike to verify
 // that our CPU monitoring code behaves similarly to 'top'
 func TestCPUSpike(t *testing.T) {
+	// Get current process ID
+	pid := os.Getpid()
+	t.Log("Current process ID:", pid)
+
 	if runtime.GOOS != "linux" {
 		t.Skip("Skipping test on non-Linux platform")
 	}
@@ -22,8 +26,6 @@ func TestCPUSpike(t *testing.T) {
 		t.Fatalf("Failed to get initial CPU info: %v", err)
 	}
 
-	// Get current process ID
-	pid := os.Getpid()
 	initialProcInfo, err := GetProcessCPUInfo(pid)
 	if err != nil {
 		t.Fatalf("Failed to get initial process CPU info: %v", err)
@@ -31,17 +33,17 @@ func TestCPUSpike(t *testing.T) {
 
 	// Create a CPU spike by performing intensive calculations in the main test goroutine
 	// This ensures that the CPU usage is attributed to the test process
-	fmt.Println("Starting CPU spike simulation...")
-	
+	t.Logf("Starting CPU spike simulation...pid %d, initial info: %#v, initial process info: %#v", pid, initialInfo, initialProcInfo)
+
 	// Create a channel for timing
 	done := make(chan bool)
-	
+
 	// Start a goroutine to signal when to stop the CPU spike
 	go func() {
-		time.Sleep(2 * time.Second)
+		time.Sleep(3 * time.Second)
 		done <- true
 	}()
-	
+
 	// Perform CPU-intensive calculations in the main test goroutine
 	// This will ensure the CPU usage is attributed to this process
 	counter := 0
@@ -59,10 +61,10 @@ func TestCPUSpike(t *testing.T) {
 			counter++
 		}
 	}
-	done:
+done:
 
 	// The CPU spike has already run for the specified period
-	
+
 	// Get CPU info during the spike
 	spikeInfo, err := GetCPUInfo()
 	if err != nil {
@@ -76,28 +78,28 @@ func TestCPUSpike(t *testing.T) {
 	}
 
 	// CPU spike has already been stopped
-	
-	fmt.Println("CPU spike simulation completed")
+
+	fmt.Printf("CPU spike simulation completed, %#v\n", spikeProcInfo)
 
 	// Calculate CPU usage percentages
 	systemCPUPercent := calculateCPUPercent(initialInfo, spikeInfo)
 	processCPUPercent := calculateProcessCPUPercent(initialProcInfo, spikeProcInfo, initialInfo, spikeInfo)
-	
+
 	// Print the results
 	fmt.Printf("System CPU Usage: %.2f%%\n", systemCPUPercent)
 	fmt.Printf("Process CPU Usage: %.2f%%\n", processCPUPercent)
-	
+
 	// Verify that we detected significant CPU usage
 	if systemCPUPercent < 10.0 {
 		t.Errorf("Expected system CPU usage to be at least 10%%, got %.2f%%", systemCPUPercent)
 	}
-	
+
 	// On Linux, a single-threaded CPU-intensive process should show significant CPU usage
 	// We expect at least 50% of a single core, which translates to different percentages
 	// depending on the number of cores
 	minExpectedProcessCPU := 50.0 / float64(runtime.NumCPU())
 	if processCPUPercent < minExpectedProcessCPU {
-		t.Errorf("Expected process CPU usage to be at least %.2f%% (50%% of a single core), got %.2f%%", 
+		t.Errorf("Expected process CPU usage to be at least %.2f%% (50%% of a single core), got %.2f%%",
 			minExpectedProcessCPU, processCPUPercent)
 	}
 
@@ -146,27 +148,4 @@ func TestCPUInfoAccuracy(t *testing.T) {
 		t.Errorf("Expected positive clock ticks, got %.2f", ticks)
 	}
 	t.Logf("Clock ticks: %.2f", ticks)
-}
-
-// TestCalculateClockTicks tests the calculateClockTicks function
-func TestCalculateClockTicks(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping test on non-Linux platform")
-	}
-	ticks, err := calculateClockTicks()
-	if err != nil {
-		t.Fatalf("Failed to calculate clock ticks: %v", err)
-	}
-
-	if ticks <= 0 {
-		t.Errorf("Expected positive clock ticks, got %.2f", ticks)
-	}
-
-	// Most Linux systems use 100 or 1000 Hz for the clock tick rate
-	// Check if our calculated value is in a reasonable range
-	if ticks < 50 || ticks > 2000 {
-		t.Logf("Warning: Calculated clock ticks (%.2f) outside expected range (50-2000)", ticks)
-	}
-
-	t.Logf("Calculated clock ticks: %.2f", ticks)
 }
