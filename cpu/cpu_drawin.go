@@ -109,12 +109,24 @@ type hostCpuLoadInfoData struct {
 
 // 进程任务信息结构体
 type procTaskInfo struct {
-	VirtualSize  uint64
-	ResidentSize uint64
-	TotalUser    uint64
-	TotalSystem  uint64
-	Threads      uint32
-	Threadnum    uint32
+	Virtual_size      uint64
+	Resident_size     uint64
+	Total_user        uint64
+	Total_system      uint64
+	Threads_user      uint64
+	Threads_system    uint64
+	Policy            int32
+	Faults            int32
+	Pageins           int32
+	Cow_faults        int32
+	Messages_sent     int32
+	Messages_received int32
+	Syscalls_mach     int32
+	Syscalls_unix     int32
+	Csw               int32
+	Threadnum         int32
+	Numrunning        int32
+	Priority          int32
 }
 
 // 初始化函数
@@ -495,7 +507,7 @@ func (p *Process) TimesWithContext(ctx context.Context) (*TimesStat, error) {
 	// 创建CPU时间统计
 	return &TimesStat{
 		CPU:    "cpu",
-		User:   float64(ti.TotalUser) * timeScale / 1e9,
-		System: float64(ti.TotalSystem) * timeScale / 1e9,
+		User:   float64(ti.Total_user) * timeScale / 1e9,
+		System: float64(ti.Total_system) * timeScale / 1e9,
 	}, nil
 }
