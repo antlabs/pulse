@@ -18,26 +18,26 @@ import (
 
 // 使用 go-purego 库加载动态库
 
-func main() {
-	// 测试本机 CPU 使用率
-	fmt.Println("=== 本机 CPU 使用率测试 ===")
-	cpuPercent, err := PercentWithContext(context.Background(), 1*time.Second, false)
-	if err != nil {
-		fmt.Printf("错误: %v\n", err)
-	} else {
-		fmt.Printf("本机 CPU 使用率: %.2f%%\n", cpuPercent[0])
-	}
+// func main() {
+// 	// 测试本机 CPU 使用率
+// 	fmt.Println("=== 本机 CPU 使用率测试 ===")
+// 	cpuPercent, err := PercentWithContext(context.Background(), 1*time.Second, false)
+// 	if err != nil {
+// 		fmt.Printf("错误: %v\n", err)
+// 	} else {
+// 		fmt.Printf("本机 CPU 使用率: %.2f%%\n", cpuPercent[0])
+// 	}
 
-	// 测试本进程 CPU 使用率
-	fmt.Println("\n=== 本进程 CPU 使用率测试 ===")
-	p := &Process{Pid: 0} // 0 表示当前进程
-	procPercent, err := p.PercentWithContext(context.Background(), 1*time.Second)
-	if err != nil {
-		fmt.Printf("错误: %v\n", err)
-	} else {
-		fmt.Printf("本进程 CPU 使用率: %.2f%%\n", procPercent)
-	}
-}
+// 	// 测试本进程 CPU 使用率
+// 	fmt.Println("\n=== 本进程 CPU 使用率测试 ===")
+// 	p := &Process{Pid: 0} // 0 表示当前进程
+// 	procPercent, err := p.PercentWithContext(context.Background(), 1*time.Second)
+// 	if err != nil {
+// 		fmt.Printf("错误: %v\n", err)
+// 	} else {
+// 		fmt.Printf("本进程 CPU 使用率: %.2f%%\n", procPercent)
+// 	}
+// }
 
 // CPU时间统计结构体
 type TimesStat struct {
@@ -120,7 +120,8 @@ type procTaskInfo struct {
 // 初始化函数
 func init() {
 	// 获取系统时钟频率
-	lib, err := loadLibrary("/usr/lib/libSystem.dylib")
+	lib, err := loadLibrary("/usr/lib/libSystem.B.dylib")
+	//lib, err := loadLibrary("/usr/lib/libSystem.dylib")
 	if err != nil {
 		return
 	}
@@ -177,6 +178,40 @@ func (l *Library) GetSymbol(name string) (uintptr, error) {
 // 关闭动态库
 func (l *Library) Close() {
 	purego.Dlclose(l.handle)
+}
+
+func GetCPUInfo() (CPUInfo, error) {
+	cpuTimes, err := TimesWithContext(context.Background(), false)
+	if err != nil {
+		return CPUInfo{}, err
+	}
+
+	allUser := 0.0
+	allSystem := 0.0
+	allIdle := 0.0
+	for _, cpu := range cpuTimes {
+		allUser += cpu.User
+		allSystem += cpu.System
+		allIdle += cpu.Idle
+	}
+	return CPUInfo{
+		User:   allUser,
+		System: allSystem,
+		Idle:   allIdle,
+	}, nil
+}
+
+func GetProcessCPUInfo(pid int) (ProcessCPUInfo, error) {
+	p := &Process{Pid: 0} // 0 表示当前进程
+	pPercent, err := p.TimesWithContext(context.Background())
+	if err != nil {
+		return ProcessCPUInfo{}, err
+	}
+	return ProcessCPUInfo{
+		User:   pPercent.User,
+		System: pPercent.System,
+		Total:  pPercent.Total(),
+	}, nil
 }
 
 // 获取本机CPU使用率
