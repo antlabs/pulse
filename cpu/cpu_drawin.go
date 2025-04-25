@@ -140,8 +140,8 @@ func init() {
 	mib := []int32{6, 7} // CTL_KERN, KERN_CLOCKRATE
 	size := uint64(unsafe.Sizeof(clockrate))
 
-	sysctlFn := purego.NewCallback(sysctlFunc)
-	status, _, _ := purego.SyscallN(sysctlFn,
+	// sysctlFn := purego.NewCallback(sysctlFunc)
+	status, _, _ := purego.SyscallN(sysctlFunc,
 		uintptr(unsafe.Pointer(&mib[0])),
 		uintptr(2),
 		uintptr(unsafe.Pointer(&clockrate)),
@@ -332,15 +332,15 @@ func allCPUTimes(lib *Library) ([]TimesStat, error) {
 	}
 
 	// 调用 mach_host_self
-	machHostSelfFn := purego.NewCallback(machHostSelfSym)
-	hostSelf, _, _ := purego.SyscallN(machHostSelfFn)
+	// machHostSelfFn := purego.NewCallback(machHostSelfSym)
+	hostSelf, _, _ := purego.SyscallN(machHostSelfSym)
 
 	// 准备调用 host_statistics
 	var cpuload hostCpuLoadInfoData
 	count := uint32(HOST_CPU_LOAD_INFO_COUNT)
 
-	hostStatisticsFn := purego.NewCallback(hostStatisticsSym)
-	status, _, _ := purego.SyscallN(hostStatisticsFn,
+	// hostStatisticsFn := purego.NewCallback(hostStatisticsSym)
+	status, _, _ := purego.SyscallN(hostStatisticsSym,
 		hostSelf,
 		uintptr(HOST_CPU_LOAD_INFO),
 		uintptr(unsafe.Pointer(&cpuload)),
@@ -467,8 +467,8 @@ func (p *Process) TimesWithContext(ctx context.Context) (*TimesStat, error) {
 
 	// 获取进程任务信息
 	var ti procTaskInfo
-	procPidInfoFn := purego.NewCallback(procPidInfoSym)
-	ret, _, _ := purego.SyscallN(procPidInfoFn,
+	// procPidInfoFn := purego.NewCallback(procPidInfoSym)
+	ret, _, _ := purego.SyscallN(procPidInfoSym,
 		uintptr(pid),
 		uintptr(PROC_PIDTASKINFO),
 		uintptr(0),
@@ -486,8 +486,8 @@ func (p *Process) TimesWithContext(ctx context.Context) (*TimesStat, error) {
 	}
 	var tbi timebaseInfo
 
-	machTimeBaseInfoFn := purego.NewCallback(machTimeBaseInfoSym)
-	purego.SyscallN(machTimeBaseInfoFn, uintptr(unsafe.Pointer(&tbi)))
+	// machTimeBaseInfoFn := purego.NewCallback(machTimeBaseInfoSym)
+	purego.SyscallN(machTimeBaseInfoSym, uintptr(unsafe.Pointer(&tbi)))
 
 	// 计算时间比例
 	timeScale := float64(tbi.Numer) / float64(tbi.Denom)
