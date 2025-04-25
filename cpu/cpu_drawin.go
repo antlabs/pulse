@@ -192,40 +192,6 @@ func (l *Library) Close() {
 	purego.Dlclose(l.handle)
 }
 
-func GetCPUInfo() (CPUInfo, error) {
-	cpuTimes, err := TimesWithContext(context.Background(), false)
-	if err != nil {
-		return CPUInfo{}, err
-	}
-
-	allUser := 0.0
-	allSystem := 0.0
-	allIdle := 0.0
-	for _, cpu := range cpuTimes {
-		allUser += cpu.User
-		allSystem += cpu.System
-		allIdle += cpu.Idle
-	}
-	return CPUInfo{
-		User:   allUser,
-		System: allSystem,
-		Idle:   allIdle,
-	}, nil
-}
-
-func GetProcessCPUInfo(pid int) (ProcessCPUInfo, error) {
-	p := &Process{Pid: 0} // 0 表示当前进程
-	pPercent, err := p.TimesWithContext(context.Background())
-	if err != nil {
-		return ProcessCPUInfo{}, err
-	}
-	return ProcessCPUInfo{
-		User:   pPercent.User,
-		System: pPercent.System,
-		Total:  pPercent.Total(),
-	}, nil
-}
-
 // 获取本机CPU使用率
 func PercentWithContext(ctx context.Context, interval time.Duration, percpu bool) ([]float64, error) {
 	if interval <= 0 {
@@ -509,5 +475,44 @@ func (p *Process) TimesWithContext(ctx context.Context) (*TimesStat, error) {
 		CPU:    "cpu",
 		User:   float64(ti.Total_user) * timeScale / 1e9,
 		System: float64(ti.Total_system) * timeScale / 1e9,
+	}, nil
+}
+
+func GetCPUInfo() (CPUInfo, error) {
+	cpuTimes, err := TimesWithContext(context.Background(), false)
+	if err != nil {
+		return CPUInfo{}, err
+	}
+
+	allUser := 0.0
+	allSystem := 0.0
+	allIdle := 0.0
+	allTotal := 0.0
+	for _, cpu := range cpuTimes {
+		allUser += cpu.User
+		allSystem += cpu.System
+		allIdle += cpu.Idle
+		allTotal += cpu.Total()
+	}
+	return CPUInfo{
+		User:   allUser,
+		System: allSystem,
+		Idle:   allIdle,
+		Total:  allTotal,
+	}, nil
+}
+
+func GetProcessCPUInfo(pid int) (ProcessCPUInfo, error) {
+	p := &Process{Pid: 0} // 0 表示当前进程
+	pPercent, err := p.TimesWithContext(context.Background())
+	if err != nil {
+		return ProcessCPUInfo{}, err
+	}
+	numCPU := float64(runtime.NumCPU())
+	adjust := 10.0
+	return ProcessCPUInfo{
+		User:   (pPercent.User / numCPU) / adjust,
+		System: (pPercent.System / numCPU) / adjust,
+		Total:  (pPercent.Total() / numCPU) / adjust,
 	}, nil
 }

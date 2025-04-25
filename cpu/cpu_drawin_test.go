@@ -2,7 +2,6 @@ package cpu
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"runtime"
 	"testing"
@@ -49,15 +48,17 @@ func TestCPUSpike(t *testing.T) {
 	counter := 0
 	loopStart := time.Now()
 	for {
+		// x := 1.0
 		select {
+
 		case <-done:
 			fmt.Printf("Performed %d calculation loops in %v\n", counter, time.Since(loopStart))
 			goto done
 		default:
-			// Busy loop to consume CPU - more intensive calculation
-			for j := 0; j < 1000000; j++ {
-				_ = math.Sqrt(float64(j)) * math.Cos(float64(j))
-			}
+			// // Busy loop to consume CPU - more intensive calculation
+			// for j := 0; j < 10000000; j++ {
+			// 	x += float64(j)*1.0000001 - x*0.9999999
+			// }
 			counter++
 		}
 	}
@@ -142,3 +143,21 @@ func TestCPUInfoAccuracy(t *testing.T) {
 		}
 	}
 }
+
+// func Test_Loop(t *testing.T) {
+// 	numCPU := runtime.NumCPU()
+// 	runtime.GOMAXPROCS(numCPU / 2)
+
+// 	t.Log("NumCPU:", numCPU)
+// 	var wg sync.WaitGroup
+// 	for i := 0; i < numCPU/2; i++ {
+// 		wg.Add(1)
+// 		go func() {
+// 			defer wg.Done()
+// 			for {
+// 			}
+// 		}()
+// 	}
+
+// 	wg.Wait()
+// }
