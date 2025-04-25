@@ -30,6 +30,7 @@ type safeConns[T any] struct {
 
 func (s *safeConns[T]) init() {
 	s.conns = make([]*T, 1000000) // 100w个指针
+	s.connsPtr = &s.conns[0]
 }
 
 func (s *safeConns[T]) Add(fd int, c *T) {

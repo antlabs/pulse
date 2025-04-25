@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// https://man7.org/linux/man-pages/man5/proc_pid_stat.5.html
 var clocksPerSec = float64(100)
 
 // 获取 Linux 系统的 CPU 信息
