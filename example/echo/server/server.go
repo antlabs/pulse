@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/antlabs/pulse"
@@ -33,6 +34,7 @@ func (h *handler) OnClose(c *pulse.Conn, err error) {
 func main() {
 
 	el, err := pulse.NewMultiEventLoop(
+		context.Background(),
 		pulse.WithCallback(&handler{}),
 	)
 	if err != nil {

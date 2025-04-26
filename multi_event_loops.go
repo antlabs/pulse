@@ -1,6 +1,7 @@
 package pulse
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net"
@@ -9,15 +10,33 @@ import (
 	"time"
 
 	"github.com/antlabs/pulse/core"
+	"github.com/antlabs/pulse/task/driver"
 	"golang.org/x/sys/unix"
 )
 
 type MultiEventLoop[T any] struct {
 	eventLoops []core.PollingApi
 	options    Options[T]
+	localTask  selectTasks
+	ctx        context.Context
 }
 
-func NewMultiEventLoop[T any](options ...func(*Options[T])) (e *MultiEventLoop[T], err error) {
+func (m *MultiEventLoop[T]) initDefaultSetting() {
+
+	if m.options.task.min == 0 {
+		m.options.task.min = defTaskMin
+	}
+
+	if m.options.task.max == 0 {
+		m.options.task.max = defTaskMax
+	}
+
+	if m.options.task.initCount == 0 {
+		m.options.task.initCount = defTaskInitCount
+	}
+}
+
+func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T])) (e *MultiEventLoop[T], err error) {
 	eventLoops := make([]core.PollingApi, runtime.NumCPU())
 	for i := 0; i < runtime.NumCPU(); i++ {
 		eventLoops[i], err = core.Create()
@@ -26,13 +45,16 @@ func NewMultiEventLoop[T any](options ...func(*Options[T])) (e *MultiEventLoop[T
 		}
 	}
 
+	var c driver.Conf
+	c.Log = slog.Default()
 	e = &MultiEventLoop[T]{
 		eventLoops: eventLoops,
 	}
-
+	e.initDefaultSetting()
 	for _, option := range options {
 		option(&e.options)
 	}
+	e.localTask = newSelectTask(ctx, e.options.task.initCount, e.options.task.min, e.options.task.max, &c)
 
 	return e, nil
 }
@@ -96,7 +118,7 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 
 					c := safeConns.Get(fd)
 					if c == nil {
-						c = newConn(fd, &safeConns)
+						c = newConn(fd, &safeConns, e.localTask)
 						safeConns.Add(fd, c)
 					}
 

@@ -83,7 +83,7 @@ done:
 	fmt.Printf("CPU spike simulation completed, %#v\n", spikeProcInfo)
 
 	// Calculate CPU usage percentages
-	systemCPUPercent := calculateCPUPercent(initialInfo, spikeInfo)
+	systemCPUPercent := CalculateCPUPercent(initialInfo, spikeInfo)
 	processCPUPercent := calculateProcessCPUPercent(initialProcInfo, spikeProcInfo, initialInfo, spikeInfo)
 
 	// Print the results

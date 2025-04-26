@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/antlabs/pulse/task/driver"
 	"golang.org/x/sys/unix"
 )
 
@@ -15,12 +16,14 @@ type Conn struct {
 	wbuf      *[]byte // write buffer, 为了理精细控制内存使用量
 	mu        sync.Mutex
 	safeConns *safeConns[Conn]
+	task      driver.TaskExecutor
 }
 
-func newConn(fd int, safeConns *safeConns[Conn]) *Conn {
+func newConn(fd int, safeConns *safeConns[Conn], task selectTasks) *Conn {
 	return &Conn{
 		fd:        int64(fd),
 		safeConns: safeConns,
+		task:      task.newTask("stream2"),
 	}
 }
 
@@ -108,6 +111,9 @@ func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
 		data = raw
 	}
 
-	// 调用 OnData 回调
-	options.callback.OnData(c, data)
+	// 进入协程池
+	c.task.AddTask(&c.mu, func() bool {
+		options.callback.OnData(c, data)
+		return true
+	})
 }

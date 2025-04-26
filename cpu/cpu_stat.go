@@ -17,14 +17,14 @@ type ProcessCPUInfo struct {
 }
 
 // 计算全局 CPU 使用率
-func calculateCPUPercent(prev, curr CPUInfo) float64 {
+func CalculateCPUPercent(prev, curr CPUInfo) float64 {
 	totalDelta := curr.Total - prev.Total
 	idleDelta := curr.Idle - prev.Idle
 	return (totalDelta - idleDelta) / totalDelta * 100
 }
 
 // 计算本进程的 CPU 使用率
-func calculateProcessCPUPercent(prevProc, currProc ProcessCPUInfo, prevSys, currSys CPUInfo) float64 {
+func CalculateProcessCPUPercent(prevProc, currProc ProcessCPUInfo, prevSys, currSys CPUInfo) float64 {
 	totalDelta := currSys.Total - prevSys.Total
 	procDelta := currProc.Total - prevProc.Total
 	return (procDelta / totalDelta) * 100
