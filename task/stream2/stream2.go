@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/antlabs/pulse/cpu"
 	"github.com/antlabs/pulse/task/driver"
 )
 
@@ -169,8 +170,8 @@ func (s *stream2) mainLoopLinux() {
 	subMax := 10
 	subCount := 0
 
-	initialInfo, _ := GetCPUInfo()
-	initialProcInfo, _ := GetProcessCPUInfo(os.Getpid())
+	initialInfo, _ := cpu.GetCPUInfo()
+	initialProcInfo, _ := cpu.GetProcessCPUInfo(os.Getpid())
 	notBusyProcess := false
 	running := false
 	for {
@@ -202,19 +203,19 @@ func (s *stream2) mainLoopLinux() {
 				subCount = 0
 			}
 
-			currInfo, _ := GetCPUInfo()
-			currProcInfo, _ := GetProcessCPUInfo(os.Getpid())
+			currInfo, _ := cpu.GetCPUInfo()
+			currProcInfo, _ := cpu.GetProcessCPUInfo(os.Getpid())
 
-			notBusyProcess = CalculateCPUPercent(initialInfo, currProcInfo) < 0.7 // 0.7考虑到超线程, 超过这个值，后面能压榨的算力很少
-			notBusyMachine := CalculateCPUPercent(initialInfo, currInfo) < 0.7    // 同上
+			notBusyProcess = cpu.CalculateProcessCPUPercent(initialProcInfo, currProcInfo, initialInfo, currInfo) < 0.7 // 0.7考虑到超线程, 超过这个值，后面能压榨的算力很少
+			notBusyMachine := cpu.CalculateCPUPercent(initialInfo, currInfo) < 0.7                                      // 同上
 
 			s.conf.Log.Debug("status",
 				"notbusy", notBusyProcess,
 				"letmax", s.lteMax(),
-				"cpu-process", CalculateProcessCPUPercent(initialProcInfo, currProcInfo, initialInfo, currInfo),
+				"cpu-process", cpu.CalculateProcessCPUPercent(initialProcInfo, currProcInfo, initialInfo, currInfo),
 				"haveData-len", len(s.haveData),
 				"haveData-cap", cap(s.haveData),
-				"cpu-machine", CalculateCPUPercent(initialInfo, currInfo),
+				"cpu-machine", cpu.CalculateCPUPercent(initialInfo, currInfo),
 				"onMessageCount", s.loadOnMessageCount(),
 			)
 

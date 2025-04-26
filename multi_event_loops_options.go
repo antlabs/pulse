@@ -1,6 +1,9 @@
 package pulse
 
-import "runtime"
+import (
+	"log/slog"
+	"runtime"
+)
 
 var (
 	defMaxEventNum   = 256
@@ -19,6 +22,7 @@ type Options[T any] struct {
 	callback Callback[T]
 	decoder  Decoder[T]
 	task     taskConfig
+	level    slog.Level
 }
 
 func WithCallback[T any](callback Callback[T]) func(*Options[T]) {
@@ -31,5 +35,11 @@ func WithDecoder[T any](decoder Decoder[T]) func(*Options[T]) {
 
 	return func(o *Options[T]) {
 		o.decoder = decoder
+	}
+}
+
+func WithLogLevel[T any](level slog.Level) func(*Options[T]) {
+	return func(o *Options[T]) {
+		o.level = level
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/antlabs/pulse"
 )
@@ -19,7 +20,7 @@ func (h *handler) OnOpen(c *pulse.Conn, err error) {
 }
 
 func (h *handler) OnData(c *pulse.Conn, data []byte) {
-	fmt.Println("OnData:", string(data))
+	// fmt.Println("OnData:", string(data))
 	c.Write(data)
 }
 
@@ -41,5 +42,6 @@ func main() {
 		panic(err.Error())
 	}
 
+	slog.Info("Server started on :8080")
 	el.ListenAndServe(":8080")
 }

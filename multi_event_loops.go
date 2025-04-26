@@ -5,12 +5,16 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"os"
 	"runtime"
 	"sync"
 	"time"
 
 	"github.com/antlabs/pulse/core"
 	"github.com/antlabs/pulse/task/driver"
+	_ "github.com/antlabs/pulse/task/io"
+	_ "github.com/antlabs/pulse/task/stream"
+	_ "github.com/antlabs/pulse/task/stream2"
 	"golang.org/x/sys/unix"
 )
 
@@ -23,6 +27,9 @@ type MultiEventLoop[T any] struct {
 
 func (m *MultiEventLoop[T]) initDefaultSetting() {
 
+	if m.options.level == 0 {
+		m.options.level = slog.LevelError //
+	}
 	if m.options.task.min == 0 {
 		m.options.task.min = defTaskMin
 	}
@@ -51,6 +58,8 @@ func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T]))
 		eventLoops: eventLoops,
 	}
 	e.initDefaultSetting()
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: e.options.level})))
+
 	for _, option := range options {
 		option(&e.options)
 	}
