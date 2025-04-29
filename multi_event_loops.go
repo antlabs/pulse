@@ -137,7 +137,8 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 						}
 						for {
 							// 循环读取数据
-							n, err := unix.Read(fd, *c.rbuf)
+							buf := *c.rbuf
+							n, err := unix.Read(fd, buf)
 							if err != nil {
 								// EAGAIN表示没有数据
 								if errors.Is(err, unix.EAGAIN) {

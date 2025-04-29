@@ -138,7 +138,7 @@ func (e *eventPollState) Del(fd int) error {
 }
 
 // 事件循环
-func (e *eventPollState) Poll(tv time.Duration, cb func(int, State, error)) (retVal int, err error) {
+func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err error)) (retVal int, err error) {
 	msec := -1
 	if tv > 0 {
 		msec = int(tv) / int(time.Millisecond)

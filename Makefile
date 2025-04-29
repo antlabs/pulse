@@ -1,5 +1,5 @@
 # Makefile for building pulse examples for macOS and Linux
-.PHONY: all clean mac linux examples
+.PHONY: all clean mac linux examples mac-race linux-race
 
 # Default target
 all: examples
@@ -14,6 +14,7 @@ LINUX_DIR = $(BIN_DIR)/linux
 GO = go
 GO_BUILD = $(GO) build
 GO_FLAGS = -v
+GO_RACE_FLAGS = -v -race
 GOOS_MAC = darwin
 GOOS_LINUX = linux
 
@@ -39,6 +40,15 @@ mac: $(MAC_DIR)
 	GOOS=$(GOOS_MAC) $(GO_BUILD) $(GO_FLAGS) -o $(MAC_DIR)/echo_server $(EXAMPLE_DIR)/echo/server/server.go
 	@echo "macOS examples built successfully in $(MAC_DIR)/"
 
+# Build macOS examples with race detection
+mac-race: $(MAC_DIR)
+	@echo "Building macOS examples with race detection..."
+	CGO_ENABLED=1 GOOS=$(GOOS_MAC) $(GO_BUILD) $(GO_RACE_FLAGS) -o $(MAC_DIR)/client_race $(EXAMPLE_DIR)/core/client/client.go
+	CGO_ENABLED=1 GOOS=$(GOOS_MAC) $(GO_BUILD) $(GO_RACE_FLAGS) -o $(MAC_DIR)/server_race $(EXAMPLE_DIR)/core/server/server.go
+	CGO_ENABLED=1 GOOS=$(GOOS_MAC) $(GO_BUILD) $(GO_RACE_FLAGS) -o $(MAC_DIR)/echo_client_race $(EXAMPLE_DIR)/echo/client/client.go
+	CGO_ENABLED=1 GOOS=$(GOOS_MAC) $(GO_BUILD) $(GO_RACE_FLAGS) -o $(MAC_DIR)/echo_server_race $(EXAMPLE_DIR)/echo/server/server.go
+	@echo "macOS examples with race detection built successfully in $(MAC_DIR)/"
+
 # Build Linux examples
 linux: $(LINUX_DIR)
 	@echo "Building Linux examples..."
@@ -47,6 +57,15 @@ linux: $(LINUX_DIR)
 	GOOS=$(GOOS_LINUX) $(GO_BUILD) $(GO_FLAGS) -o $(LINUX_DIR)/echo_client $(EXAMPLE_DIR)/echo/client/client.go
 	GOOS=$(GOOS_LINUX) $(GO_BUILD) $(GO_FLAGS) -o $(LINUX_DIR)/echo_server $(EXAMPLE_DIR)/echo/server/server.go
 	@echo "Linux examples built successfully in $(LINUX_DIR)/"
+
+# Build Linux examples with race detection
+linux-race: $(LINUX_DIR)
+	@echo "Building Linux examples with race detection..."
+	CGO_ENABLED=1 GOOS=$(GOOS_LINUX) $(GO_BUILD) $(GO_RACE_FLAGS) -o $(LINUX_DIR)/client_race $(EXAMPLE_DIR)/core/client/client.go
+	CGO_ENABLED=1 GOOS=$(GOOS_LINUX) $(GO_BUILD) $(GO_RACE_FLAGS) -o $(LINUX_DIR)/server_race $(EXAMPLE_DIR)/core/server/server.go
+	CGO_ENABLED=1 GOOS=$(GOOS_LINUX) $(GO_BUILD) $(GO_RACE_FLAGS) -o $(LINUX_DIR)/echo_client_race $(EXAMPLE_DIR)/echo/client/client.go
+	CGO_ENABLED=1 GOOS=$(GOOS_LINUX) $(GO_BUILD) $(GO_RACE_FLAGS) -o $(LINUX_DIR)/echo_server_race $(EXAMPLE_DIR)/echo/server/server.go
+	@echo "Linux examples with race detection built successfully in $(LINUX_DIR)/"
 
 # Clean build artifacts
 clean:
