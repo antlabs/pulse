@@ -24,6 +24,16 @@ func (h *handler) OnOpen(c *pulse.Conn, err error) {
 
 func (h *handler) OnData(c *pulse.Conn, data []byte) {
 	// fmt.Println("OnData:", string(data))
+	// fmt.Printf("OnData: %d, %p\n", len(data), c)
+
+	// fd, err := os.OpenFile("test.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
+	// defer fd.Close()
+
+	// fd.Write(data)
+
 	c.Write(data)
 }
 

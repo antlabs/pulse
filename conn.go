@@ -35,15 +35,18 @@ func (c *Conn) Write(data []byte) (int, error) {
 	if c.wbuf == nil {
 		n, err := unix.Write(c.getFd(), data)
 		if err == unix.EAGAIN {
-			newBytes := getBytes(len(data))
-			c.wbuf = newBytes
+			// newBytes := getBytes(len(data))
+			// *newBytes = (*newBytes)[:len(data)]
+			// c.wbuf = newBytes
+			newBytes := make([]byte, len(data))
+			c.wbuf = &newBytes
 			if n > 0 {
 				// 部分写成功
-				copy(*newBytes, data[:n])
+				copy(*c.wbuf, data[:n])
 				*c.wbuf = (*c.wbuf)[:n]
 			} else {
 				// 全部写失败
-				copy(*newBytes, data)
+				copy(*c.wbuf, data)
 				*c.wbuf = (*c.wbuf)[:len(data)]
 			}
 			c.mu.Unlock()
@@ -55,7 +58,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 
 	*c.wbuf = append(*c.wbuf, data...)
 
-	n, err := unix.Write(int(c.fd), *c.wbuf)
+	n, err := unix.Write(int(c.getFd()), *c.wbuf)
 	if n == len(*c.wbuf) {
 		putBytes(c.wbuf)
 		c.wbuf = nil
@@ -118,15 +121,18 @@ func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
 		}
 		newBytes = getBytes(len(rawData))
 		copy(*newBytes, rawData)
+		*newBytes = (*newBytes)[:len(rawData)]
 		data = any(*newBytes).(T)
 	}
 
 	// 进入协程池
+	// options.callback.OnData(c, data)
 	c.task.AddTask(&c.mu, func() bool {
 		options.callback.OnData(c, data)
 		// 释放newBytes
 		if newBytes != nil {
 			putBytes(newBytes)
+			newBytes = nil
 		}
 		return true
 	})

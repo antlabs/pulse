@@ -134,6 +134,7 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 					if state.IsRead() {
 						if c.rbuf == nil {
 							c.rbuf = getBytes(1024)
+							*c.rbuf = (*c.rbuf)[:1024]
 						}
 						for {
 							// 循环读取数据
