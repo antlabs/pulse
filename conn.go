@@ -19,6 +19,9 @@ type Conn struct {
 	task      driver.TaskExecutor
 }
 
+func (c *Conn) getFd() int {
+	return int(atomic.LoadInt64(&c.fd))
+}
 func newConn(fd int, safeConns *safeConns[Conn], task selectTasks) *Conn {
 	return &Conn{
 		fd:        int64(fd),
@@ -30,9 +33,19 @@ func newConn(fd int, safeConns *safeConns[Conn], task selectTasks) *Conn {
 func (c *Conn) Write(data []byte) (int, error) {
 	c.mu.Lock()
 	if c.wbuf == nil {
-		n, err := unix.Write(int(c.fd), data)
+		n, err := unix.Write(c.getFd(), data)
 		if err == unix.EAGAIN {
-			*c.wbuf = append(*c.wbuf, data[n:]...)
+			newBytes := getBytes(len(data))
+			c.wbuf = newBytes
+			if n > 0 {
+				// 部分写成功
+				copy(*newBytes, data[:n])
+				*c.wbuf = (*c.wbuf)[:n]
+			} else {
+				// 全部写失败
+				copy(*newBytes, data)
+				*c.wbuf = (*c.wbuf)[:len(data)]
+			}
 			c.mu.Unlock()
 			return 0, nil
 		}
@@ -41,31 +54,25 @@ func (c *Conn) Write(data []byte) (int, error) {
 	}
 
 	*c.wbuf = append(*c.wbuf, data...)
-	c.mu.Unlock()
 
 	n, err := unix.Write(int(c.fd), *c.wbuf)
 	if n == len(*c.wbuf) {
-		c.mu.Lock()
+		putBytes(c.wbuf)
 		c.wbuf = nil
-		// TODO: release memory
-		c.mu.Unlock()
 	}
+	c.mu.Unlock()
 
 	return n, err
 }
 
-func (c *Conn) needFlush() bool {
-	return c.wbuf != nil && len(*c.wbuf) > 0
-}
-
 func (c *Conn) flush() {
 	c.mu.Lock()
-	if c.wbuf == nil {
+	if c.wbuf == nil || len(*c.wbuf) == 0 {
 		c.mu.Unlock()
 		return
 	}
 
-	fd := atomic.LoadInt64(&c.fd)
+	fd := c.getFd()
 	n, err := unix.Write(int(fd), *c.wbuf)
 	if err != nil {
 		if errors.Is(err, unix.EAGAIN) {
@@ -79,8 +86,8 @@ func (c *Conn) flush() {
 		return
 	}
 	if n == len(*c.wbuf) {
+		putBytes(c.wbuf)
 		c.wbuf = nil
-		// TODO: release memory
 	} else if n > 0 {
 		copy(*c.wbuf, (*c.wbuf)[n:])
 		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
@@ -92,6 +99,7 @@ func (c *Conn) flush() {
 func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
 	var data T
 
+	var newBytes *[]byte
 	// 如果配置了解码器，则尝试解码
 	if options.decoder != nil {
 		decodedData, _, err := options.decoder.Decode(rawData)
@@ -103,17 +111,27 @@ func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
 		}
 	} else {
 		// 如果没有解码器，直接将原始数据转换为目标类型
-		raw, ok := any(rawData).(T)
+		_, ok := any(rawData).(T)
 		if !ok {
 			fmt.Println("Type assertion failed for raw data")
 			return
 		}
-		data = raw
+		newBytes = getBytes(len(rawData))
+		copy(*newBytes, rawData)
+		data = any(*newBytes).(T)
 	}
 
 	// 进入协程池
 	c.task.AddTask(&c.mu, func() bool {
 		options.callback.OnData(c, data)
+		// 释放newBytes
+		if newBytes != nil {
+			putBytes(newBytes)
+		}
 		return true
 	})
+}
+
+func (c *Conn) needFlush() bool {
+	return c.wbuf != nil && len(*c.wbuf) > 0
 }

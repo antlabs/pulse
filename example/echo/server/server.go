@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"net/http"
+	_ "net/http/pprof"
+
 	"github.com/antlabs/pulse"
 )
 
@@ -34,9 +37,14 @@ func (h *handler) OnClose(c *pulse.Conn, err error) {
 
 func main() {
 
+	go func() {
+		http.ListenAndServe(":7777", nil)
+	}()
+
 	el, err := pulse.NewMultiEventLoop(
 		context.Background(),
 		pulse.WithCallback(&handler{}),
+		pulse.WithLogLevel[[]byte](slog.LevelDebug),
 	)
 	if err != nil {
 		panic(err.Error())

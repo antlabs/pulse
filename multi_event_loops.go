@@ -58,11 +58,11 @@ func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T]))
 		eventLoops: eventLoops,
 	}
 	e.initDefaultSetting()
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: e.options.level})))
 
 	for _, option := range options {
 		option(&e.options)
 	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: e.options.level})))
 	e.localTask = newSelectTask(ctx, e.options.task.initCount, e.options.task.min, e.options.task.max, &c)
 
 	return e, nil
@@ -158,7 +158,11 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 								safeConns.Del(fd)
 								break
 							}
-							handleData(c, &e.options, (*c.rbuf)[:n])
+							if n < 0 {
+								panic("read n < 0")
+							}
+
+							handleData(c, &e.options, buf[:n])
 						}
 					}
 
