@@ -32,7 +32,7 @@ type eventPollState struct {
 	events []unix.Kevent_t
 }
 
-func Create() (as PollingApi, err error) {
+func Create(triggerType TriggerType) (as PollingApi, err error) {
 	var state eventPollState
 	state.kqfd, err = unix.Kqueue()
 	if err != nil {

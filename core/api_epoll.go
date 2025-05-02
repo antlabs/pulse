@@ -20,9 +20,9 @@ package core
 import (
 	"errors"
 	"io"
+	"log/slog"
+	"syscall"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 const (
@@ -32,37 +32,37 @@ const (
 	// it is possible to add the file descriptor inside the epoll interface (EPOLL_CTL_ADD) once by specifying (EPOLLIN|EPOLLOUT).
 	// This allows you to avoid con‐
 	// tinuously switching between EPOLLIN and EPOLLOUT calling epoll_ctl(2) with EPOLL_CTL_MOD.
-	etRead      = uint32(unix.EPOLLERR | unix.EPOLLHUP | unix.EPOLLRDHUP | unix.EPOLLPRI | unix.EPOLLIN | unix.EPOLLOUT | unix.EPOLLET)
-	etWrite     = uint32(0)
-	etDelWrite  = uint32(0)
-	etResetRead = uint32(0)
+	etRead      = int(syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | -syscall.EPOLLET)
+	etWrite     = int(0)
+	etDelWrite  = int(0)
+	etResetRead = int(0)
 
 	// TODO
-	ltRead      = uint32(0)
-	ltWrite     = uint32(0)
-	ltDelWrite  = uint32(0)
-	ltResetRead = uint32(0)
+	ltRead      = int(syscall.EPOLLIN | syscall.EPOLLRDHUP | syscall.EPOLLHUP | syscall.EPOLLERR)
+	ltWrite     = int(ltRead | syscall.EPOLLOUT)
+	ltDelWrite  = int(ltRead)
+	ltResetRead = int(ltRead)
 
 	// 写事件
-	processWrite = uint32(unix.EPOLLOUT)
+	processWrite = uint32(syscall.EPOLLOUT)
 	// 读事件
-	processRead = uint32(unix.EPOLLIN | unix.EPOLLRDHUP | unix.EPOLLHUP | unix.EPOLLERR)
+	processRead = uint32(syscall.EPOLLIN | syscall.EPOLLRDHUP | syscall.EPOLLHUP | syscall.EPOLLERR)
 )
 
 var _ PollingApi = (*eventPollState)(nil)
 
 type eventPollState struct {
 	epfd   int
-	events []unix.EpollEvent
+	events []syscall.EpollEvent
 
 	et      bool
-	rev     uint32
-	wev     uint32
-	dwEv    uint32 // delete write event
-	resetEv uint32
+	rev     int
+	wev     int
+	dwEv    int // delete write event
+	resetEv int
 }
 
-func getReadWriteDeleteReset(et bool) (uint32, uint32, uint32, uint32) {
+func getReadWriteDeleteReset(et bool) (int, int, int, int) {
 	if et {
 		return etRead, etWrite, etDelWrite, etResetRead
 	}
@@ -71,29 +71,30 @@ func getReadWriteDeleteReset(et bool) (uint32, uint32, uint32, uint32) {
 }
 
 // 创建epoll handler
-func Create() (la PollingApi, err error) {
+func Create(triggerType TriggerType) (la PollingApi, err error) {
 	var e eventPollState
-	e.epfd, err = unix.EpollCreate1(0)
+	e.epfd, err = syscall.EpollCreate1(0)
 	if err != nil {
 		return nil, err
 	}
 
-	e.events = make([]unix.EpollEvent, 128)
-	e.rev, e.wev, e.dwEv, e.resetEv = getReadWriteDeleteReset(true)
+	slog.Info("create epoll", "triggerType", triggerType)
+	e.events = make([]syscall.EpollEvent, 1024)
+	e.rev, e.wev, e.dwEv, e.resetEv = getReadWriteDeleteReset(triggerType == TriggerTypeEdge)
 	return &e, nil
 }
 
 // 释放
 func (e *eventPollState) Free() {
-	unix.Close(e.epfd)
+	syscall.Close(e.epfd)
 }
 
 // 新加读事件
 func (e *eventPollState) AddRead(fd int) error {
 	if e.rev > 0 && fd >= 0 {
-		return unix.EpollCtl(e.epfd, unix.EPOLL_CTL_ADD, fd, &unix.EpollEvent{
+		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
-			Events: e.rev,
+			Events: uint32(e.rev),
 		})
 	}
 	return nil
@@ -102,9 +103,9 @@ func (e *eventPollState) AddRead(fd int) error {
 // 新加写事件
 func (e *eventPollState) AddWrite(fd int) error {
 	if e.wev > 0 && fd >= 0 {
-		return unix.EpollCtl(e.epfd, unix.EPOLL_CTL_MOD, fd, &unix.EpollEvent{
+		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
-			Events: e.wev,
+			Events: uint32(e.wev),
 		})
 	}
 
@@ -113,9 +114,9 @@ func (e *eventPollState) AddWrite(fd int) error {
 
 func (e *eventPollState) ResetRead(fd int) error {
 	if e.resetEv > 0 && fd >= 0 {
-		return unix.EpollCtl(e.epfd, unix.EPOLL_CTL_MOD, fd, &unix.EpollEvent{
+		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
-			Events: e.resetEv,
+			Events: uint32(e.resetEv),
 		})
 	}
 	return nil
@@ -124,9 +125,9 @@ func (e *eventPollState) ResetRead(fd int) error {
 // 删除写事件
 func (e *eventPollState) DelWrite(fd int) error {
 	if e.dwEv > 0 {
-		return unix.EpollCtl(e.epfd, unix.EPOLL_CTL_MOD, fd, &unix.EpollEvent{
+		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
-			Events: e.dwEv,
+			Events: uint32(e.dwEv),
 		})
 	}
 	return nil
@@ -134,7 +135,7 @@ func (e *eventPollState) DelWrite(fd int) error {
 
 // 删除事件
 func (e *eventPollState) Del(fd int) error {
-	return unix.EpollCtl(e.epfd, unix.EPOLL_CTL_DEL, fd, &unix.EpollEvent{Fd: int32(fd)})
+	return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_DEL, fd, &syscall.EpollEvent{Fd: int32(fd)})
 }
 
 // 事件循环
@@ -144,13 +145,14 @@ func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err
 		msec = int(tv) / int(time.Millisecond)
 	}
 
-	retVal, err = unix.EpollWait(e.epfd, e.events, msec)
+	retVal, err = syscall.EpollWait(e.epfd, e.events, msec)
 	if err != nil {
-		if errors.Is(err, unix.EINTR) {
+		if errors.Is(err, syscall.EINTR) {
 			return 0, nil
 		}
 		return 0, err
 	}
+
 	numEvents := 0
 	if retVal > 0 {
 		numEvents = retVal
@@ -159,7 +161,7 @@ func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err
 			fd := ev.Fd
 
 			// unix.EPOLLRDHUP是关闭事件，遇到直接关闭
-			if ev.Events&(unix.EPOLLERR|unix.EPOLLHUP|unix.EPOLLRDHUP) > 0 {
+			if ev.Events&(syscall.EPOLLERR|syscall.EPOLLHUP|syscall.EPOLLRDHUP) > 0 {
 				cb(int(fd), WRITE|READ, io.EOF)
 				continue
 			}

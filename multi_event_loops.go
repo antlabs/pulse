@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/antlabs/pulse/core"
@@ -45,12 +46,6 @@ func (m *MultiEventLoop[T]) initDefaultSetting() {
 
 func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T])) (e *MultiEventLoop[T], err error) {
 	eventLoops := make([]core.PollingApi, runtime.NumCPU())
-	for i := 0; i < runtime.NumCPU(); i++ {
-		eventLoops[i], err = core.Create()
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	var c driver.Conf
 	c.Log = slog.Default()
@@ -61,6 +56,12 @@ func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T]))
 
 	for _, option := range options {
 		option(&e.options)
+	}
+	for i := 0; i < runtime.NumCPU(); i++ {
+		eventLoops[i], err = core.Create(e.options.triggerType)
+		if err != nil {
+			return nil, err
+		}
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: e.options.level})))
 	e.localTask = newSelectTask(ctx, e.options.task.initCount, e.options.task.min, e.options.task.max, &c)
@@ -115,7 +116,7 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 			for {
 				eventLoop.Poll(-1, func(fd int, state core.State, err error) {
 
-					slog.Info("poll", "fd", fd, "state", state.String(), "err", err)
+					slog.Debug("poll", "fd", fd, "state", state, "err", err)
 					if err != nil {
 						if errors.Is(err, unix.EAGAIN) {
 							return
@@ -127,19 +128,20 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 
 					c := safeConns.Get(fd)
 					if c == nil {
-						c = newConn(fd, &safeConns, e.localTask)
+						c = newConn(fd, &safeConns, e.localTask, e.options.taskType, eventLoop)
 						safeConns.Add(fd, c)
 					}
 
 					if state.IsRead() {
 						if c.rbuf == nil {
-							c.rbuf = getBytes(1024)
-							*c.rbuf = (*c.rbuf)[:1024]
+							c.rbuf = getBytes(1024 * 4)
+							*c.rbuf = (*c.rbuf)[:1024*4]
 						}
 						for {
 							// 循环读取数据
 							buf := *c.rbuf
-							n, err := unix.Read(fd, buf)
+							n, err := syscall.Read(fd, buf)
+							// n, err := unix.Read(fd, buf)
 							if err != nil {
 								// EAGAIN表示没有数据
 								if errors.Is(err, unix.EAGAIN) {

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"syscall"
 
+	"github.com/antlabs/pulse/core"
 	"github.com/antlabs/pulse/task/driver"
 	"golang.org/x/sys/unix"
 )
@@ -17,23 +19,31 @@ type Conn struct {
 	mu        sync.Mutex
 	safeConns *safeConns[Conn]
 	task      driver.TaskExecutor
+	eventLoop core.PollingApi
 }
 
 func (c *Conn) getFd() int {
 	return int(atomic.LoadInt64(&c.fd))
 }
-func newConn(fd int, safeConns *safeConns[Conn], task selectTasks) *Conn {
+func newConn(fd int, safeConns *safeConns[Conn], task selectTasks, taskType TaskType, eventLoop core.PollingApi) *Conn {
+	taskName := "stream2"
+	if taskType == TaskTypeInConnectionGoroutine {
+		taskName = "stream"
+	} else if taskType == TaskTypeInEventLoop {
+		taskName = "io"
+	}
 	return &Conn{
 		fd:        int64(fd),
 		safeConns: safeConns,
-		task:      task.newTask("stream2"),
+		task:      task.newTask(taskName),
+		eventLoop: eventLoop,
 	}
 }
 
 func (c *Conn) Write(data []byte) (int, error) {
 	c.mu.Lock()
 	if c.wbuf == nil {
-		n, err := unix.Write(c.getFd(), data)
+		n, err := syscall.Write(c.getFd(), data)
 		if err == unix.EAGAIN {
 			newBytes := getBytes(len(data))
 			*newBytes = (*newBytes)[:len(data)]
@@ -49,6 +59,8 @@ func (c *Conn) Write(data []byte) (int, error) {
 				copy(*c.wbuf, data)
 				*c.wbuf = (*c.wbuf)[:len(data)]
 			}
+
+			c.eventLoop.AddWrite(c.getFd())
 			c.mu.Unlock()
 			return 0, nil
 		}
@@ -58,7 +70,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 
 	*c.wbuf = append(*c.wbuf, data...)
 
-	n, err := unix.Write(int(c.getFd()), *c.wbuf)
+	n, err := syscall.Write(int(c.getFd()), *c.wbuf)
 	if n == len(*c.wbuf) {
 		putBytes(c.wbuf)
 		c.wbuf = nil
@@ -76,7 +88,7 @@ func (c *Conn) flush() {
 	}
 
 	fd := c.getFd()
-	n, err := unix.Write(int(fd), *c.wbuf)
+	n, err := syscall.Write(int(fd), *c.wbuf)
 	if err != nil {
 		if errors.Is(err, unix.EAGAIN) {
 			c.mu.Unlock()
@@ -91,6 +103,7 @@ func (c *Conn) flush() {
 	if n == len(*c.wbuf) {
 		putBytes(c.wbuf)
 		c.wbuf = nil
+		c.eventLoop.ResetRead(int(fd))
 	} else if n > 0 {
 		copy(*c.wbuf, (*c.wbuf)[n:])
 		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
@@ -123,6 +136,7 @@ func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
 		copy(*newBytes, rawData)
 		*newBytes = (*newBytes)[:len(rawData)]
 		data = any(*newBytes).(T)
+		// data = any(rawData).(T)
 	}
 
 	// 进入协程池

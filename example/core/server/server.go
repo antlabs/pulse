@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"log/slog"
+	"syscall"
 
 	"github.com/antlabs/pulse/core"
 	"golang.org/x/sys/unix"
@@ -10,7 +11,7 @@ import (
 
 func main() {
 
-	as, err := core.Create()
+	as, err := core.Create(core.TriggerTypeEdge)
 	if err != nil {
 		return
 	}
@@ -42,7 +43,7 @@ func main() {
 					}
 					if n > 0 {
 						// TODO 这里没有处理 EAGAIN
-						unix.Write(fd, buf[:n])
+						syscall.Write(fd, buf[:n])
 					} else {
 						slog.Info("read", "fd", fd, "state", state.String(), "err", err)
 					}
@@ -50,7 +51,7 @@ func main() {
 			}
 
 			if state.IsWrite() {
-				unix.Write(fd, []byte("hello client"))
+				syscall.Write(fd, []byte("hello client"))
 			}
 		})
 	}

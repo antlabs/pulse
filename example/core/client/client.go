@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"reflect"
+	"syscall"
 	"time"
 
 	"github.com/antlabs/pulse/core"
-	"golang.org/x/sys/unix"
 )
 
 func printSize(iface interface{}) bool {
@@ -19,7 +19,7 @@ type handler struct{}
 func main() {
 
 	fmt.Println(printSize(handler{}))
-	as, err := core.Create()
+	as, err := core.Create(core.TriggerTypeLevel)
 	if err != nil {
 		return
 	}
@@ -29,7 +29,7 @@ func main() {
 		return
 	}
 
-	unix.Write(fd, []byte("hello"))
+	syscall.Write(fd, []byte("hello"))
 	as.Poll(time.Second*10, func(fd int, state core.State, err error) {
 		if err != nil {
 			return

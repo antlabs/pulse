@@ -20,6 +20,14 @@ const (
 	READ
 )
 
+// 水平触发还是边缘触发
+type TriggerType uint32
+
+const (
+	TriggerTypeLevel TriggerType = iota
+	TriggerTypeEdge
+)
+
 func (s State) String() string {
 	var sb strings.Builder
 	if s.IsRead() {

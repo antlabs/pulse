@@ -6,7 +6,8 @@ import (
 	"log/slog"
 	"net"
 
-	// _ "net/http/pprof"
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/antlabs/pulse"
 )
@@ -84,11 +85,17 @@ func main() {
 	// Start standard library echo server
 	go startStandardEchoServer()
 
+	go func() {
+		http.ListenAndServe(":8082", nil)
+	}()
+
 	// Start pulse echo server
 	el, err := pulse.NewMultiEventLoop(
 		context.Background(),
 		pulse.WithCallback(&handler{}),
 		pulse.WithLogLevel[[]byte](slog.LevelError),
+		pulse.WithTaskType[[]byte](pulse.TaskTypeInEventLoop),
+		pulse.WithTriggerType[[]byte](pulse.TriggerTypeEdge),
 	)
 	if err != nil {
 		panic(err.Error())
