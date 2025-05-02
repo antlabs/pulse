@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 
-	"net/http"
-	_ "net/http/pprof"
+	// _ "net/http/pprof"
 
 	"github.com/antlabs/pulse"
 )
@@ -45,21 +45,55 @@ func (h *handler) OnClose(c *pulse.Conn, err error) {
 	fmt.Println("OnClose success")
 }
 
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+	buf := make([]byte, 1024)
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			fmt.Println("Read error:", err)
+			return
+		}
+		_, err = conn.Write(buf[:n])
+		if err != nil {
+			fmt.Println("Write error:", err)
+			return
+		}
+	}
+}
+
+// Start standard library echo server
+func startStandardEchoServer() {
+	listener, err := net.Listen("tcp", ":8081")
+	if err != nil {
+		panic(err.Error())
+	}
+	defer listener.Close()
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			fmt.Println("Accept error:", err)
+			continue
+		}
+		go handleConnection(conn)
+	}
+}
+
 func main() {
 
-	go func() {
-		http.ListenAndServe(":7777", nil)
-	}()
+	// Start standard library echo server
+	go startStandardEchoServer()
 
+	// Start pulse echo server
 	el, err := pulse.NewMultiEventLoop(
 		context.Background(),
 		pulse.WithCallback(&handler{}),
-		pulse.WithLogLevel[[]byte](slog.LevelDebug),
+		pulse.WithLogLevel[[]byte](slog.LevelError),
 	)
 	if err != nil {
 		panic(err.Error())
 	}
 
-	slog.Info("Server started on :8080")
+	slog.Info("Pulse echo server started on :8080")
 	el.ListenAndServe(":8080")
 }

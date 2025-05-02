@@ -35,11 +35,11 @@ func (c *Conn) Write(data []byte) (int, error) {
 	if c.wbuf == nil {
 		n, err := unix.Write(c.getFd(), data)
 		if err == unix.EAGAIN {
-			// newBytes := getBytes(len(data))
-			// *newBytes = (*newBytes)[:len(data)]
-			// c.wbuf = newBytes
-			newBytes := make([]byte, len(data))
-			c.wbuf = &newBytes
+			newBytes := getBytes(len(data))
+			*newBytes = (*newBytes)[:len(data)]
+			c.wbuf = newBytes
+			// newBytes := make([]byte, len(data))
+			// c.wbuf = &newBytes
 			if n > 0 {
 				// 部分写成功
 				copy(*c.wbuf, data[:n])
