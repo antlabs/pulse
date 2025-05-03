@@ -95,6 +95,11 @@ func (c *Conn) flush() {
 			return
 		}
 
+		if errors.Is(err, syscall.EINTR) {
+			c.mu.Unlock()
+			return
+		}
+
 		unix.Close(int(fd))
 		c.safeConns.Del(int(fd))
 		c.mu.Unlock()
