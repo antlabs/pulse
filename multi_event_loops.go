@@ -113,8 +113,10 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 		eventLoop := eventLoop
 		go func() {
 			defer wg.Done()
+			rbuf := make([]byte, 1024*4)
+
 			for {
-				eventLoop.Poll(-1, func(fd int, state core.State, err error) {
+				eventLoop.Poll(0, func(fd int, state core.State, err error) {
 
 					slog.Debug("poll", "fd", fd, "state", state, "err", err)
 					if err != nil {
@@ -133,21 +135,17 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 					}
 
 					if state.IsRead() {
-						if c.rbuf == nil {
-							c.rbuf = getBytes(1024 * 4)
-							*c.rbuf = (*c.rbuf)[:1024*4]
-						}
 						for {
 							// 循环读取数据
-							buf := *c.rbuf
-							n, err := syscall.Read(fd, buf)
-							// n, err := unix.Read(fd, buf)
+							n, err := syscall.Read(fd, rbuf)
 							if err != nil {
 								// EAGAIN表示没有数据
 								if errors.Is(err, unix.EAGAIN) {
-									putBytes(c.rbuf)
-									c.rbuf = nil
 									return
+								}
+
+								if errors.Is(err, syscall.EINTR) {
+									continue
 								}
 								// 如果不是这个错误直接关闭连接
 								unix.Close(fd)
@@ -165,7 +163,7 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 								panic("read n < 0")
 							}
 
-							handleData(c, &e.options, buf[:n])
+							handleData(c, &e.options, rbuf[:n])
 						}
 					}
 
@@ -174,6 +172,7 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 					}
 
 				})
+
 			}
 		}()
 	}

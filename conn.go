@@ -14,7 +14,6 @@ import (
 
 type Conn struct {
 	fd        int64
-	rbuf      *[]byte // read buffer, 为了更精细控制内存使用量
 	wbuf      *[]byte // write buffer, 为了理精细控制内存使用量
 	mu        sync.Mutex
 	safeConns *safeConns[Conn]
@@ -137,11 +136,14 @@ func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
 			fmt.Println("Type assertion failed for raw data")
 			return
 		}
-		newBytes = getBytes(len(rawData))
-		copy(*newBytes, rawData)
-		*newBytes = (*newBytes)[:len(rawData)]
-		data = any(*newBytes).(T)
-		// data = any(rawData).(T)
+		if options.taskType != TaskTypeInEventLoop {
+			newBytes = getBytes(len(rawData))
+			copy(*newBytes, rawData)
+			*newBytes = (*newBytes)[:len(rawData)]
+			data = any(*newBytes).(T)
+		} else {
+			data = any(rawData).(T)
+		}
 	}
 
 	// 进入协程池
