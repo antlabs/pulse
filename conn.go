@@ -1,6 +1,7 @@
 package pulse
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -18,6 +19,7 @@ type Conn struct {
 	safeConns *safeConns[Conn]
 	task      driver.TaskExecutor
 	eventLoop core.PollingApi
+	closed    bool
 }
 
 func (c *Conn) getFd() int {
@@ -38,6 +40,21 @@ func newConn(fd int, safeConns *safeConns[Conn], task selectTasks, taskType Task
 	}
 }
 
+func (c *Conn) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.close()
+}
+
+func (c *Conn) close() {
+	unix.Close(c.getFd())
+	c.safeConns.Del(c.getFd())
+	if c.wbuf != nil {
+		putBytes(c.wbuf)
+		c.wbuf = nil
+	}
+}
+
 func (c *Conn) Write(data []byte) (int, error) {
 	dataLen := len(data)
 	if dataLen == 0 {
@@ -45,6 +62,10 @@ func (c *Conn) Write(data []byte) (int, error) {
 	}
 
 	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return 0, errors.New("connection closed")
+	}
 	if c.wbuf == nil {
 		n, err := syscall.Write(c.getFd(), data)
 		if err == unix.EAGAIN || err == syscall.EINTR {
@@ -85,8 +106,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 		}
 
 		// 处理其他错误情况，确保不会泄漏内存
-		putBytes(c.wbuf)
-		c.wbuf = nil
+		c.close()
 		c.mu.Unlock()
 		return 0, err
 	}
@@ -115,6 +135,11 @@ func (c *Conn) flush() {
 		return
 	}
 
+	if c.closed {
+		c.mu.Unlock()
+		return
+	}
+
 	fd := c.getFd()
 	n, err := syscall.Write(fd, *c.wbuf)
 	if err != nil {
@@ -126,10 +151,7 @@ func (c *Conn) flush() {
 		}
 
 		// 处理非临时错误：清理资源并关闭连接
-		putBytes(c.wbuf)
-		c.wbuf = nil
-		unix.Close(fd)
-		c.safeConns.Del(fd)
+		c.close()
 		c.mu.Unlock()
 		return
 	}
