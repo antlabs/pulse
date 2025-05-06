@@ -1,7 +1,6 @@
 package pulse
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -48,7 +47,8 @@ func (c *Conn) Write(data []byte) (int, error) {
 	c.mu.Lock()
 	if c.wbuf == nil {
 		n, err := syscall.Write(c.getFd(), data)
-		if err == unix.EAGAIN {
+		if err == unix.EAGAIN || err == syscall.EINTR {
+			// 资源暂时不可用或被信号中断，需要缓存数据
 			newBytes := getBytes(len(data))
 			*newBytes = (*newBytes)[:len(data)]
 			c.wbuf = newBytes
@@ -62,6 +62,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 				*c.wbuf = (*c.wbuf)[:len(data)]
 			}
 
+			// 注册写事件，当socket可写时会通知我们
 			c.eventLoop.AddWrite(c.getFd())
 			c.mu.Unlock()
 			return n, nil
@@ -70,15 +71,20 @@ func (c *Conn) Write(data []byte) (int, error) {
 		return n, err
 	}
 
-	// 缓冲区已经存在，说明之前的写入还未完成
 	// 将本次数据追加到写缓冲区
-	originalBufferLen := len(*c.wbuf)
 	*c.wbuf = append(*c.wbuf, data...)
 
 	// 尝试写入缓冲区的所有数据
 	n, err := syscall.Write(c.getFd(), *c.wbuf)
-	if err != nil && err != unix.EAGAIN {
-		// 处理错误情况，确保不会泄漏内存
+	if err != nil {
+		if err == unix.EAGAIN || err == syscall.EINTR {
+			// 如果是临时错误，确保我们仍然注册了写事件
+			c.eventLoop.AddWrite(c.getFd())
+			c.mu.Unlock()
+			return 0, nil
+		}
+
+		// 处理其他错误情况，确保不会泄漏内存
 		putBytes(c.wbuf)
 		c.wbuf = nil
 		c.mu.Unlock()
@@ -93,18 +99,13 @@ func (c *Conn) Write(data []byte) (int, error) {
 		// 部分写入成功，更新缓冲区
 		copy(*c.wbuf, (*c.wbuf)[n:])
 		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
+
+		// c.eventLoop.AddWrite(c.getFd())
 	}
 
 	c.mu.Unlock()
 
-	// 计算有多少当前请求的数据被写入
-	if n <= originalBufferLen {
-		// 如果写入量小于等于原缓冲区大小，说明当前数据都未写入
-		return 0, nil
-	} else {
-		// 部分或全部被写入
-		return n - originalBufferLen, nil
-	}
+	return n, nil
 }
 
 func (c *Conn) flush() {
@@ -115,28 +116,32 @@ func (c *Conn) flush() {
 	}
 
 	fd := c.getFd()
-	n, err := syscall.Write(int(fd), *c.wbuf)
+	n, err := syscall.Write(fd, *c.wbuf)
 	if err != nil {
-		if errors.Is(err, unix.EAGAIN) {
+		if err == unix.EAGAIN || err == syscall.EINTR {
+			// 临时错误，确保我们仍然注册了写事件
+			c.eventLoop.AddWrite(fd)
 			c.mu.Unlock()
 			return
 		}
 
-		if errors.Is(err, syscall.EINTR) {
-			c.mu.Unlock()
-			return
-		}
-
-		unix.Close(int(fd))
-		c.safeConns.Del(int(fd))
+		// 处理非临时错误：清理资源并关闭连接
+		putBytes(c.wbuf)
+		c.wbuf = nil
+		unix.Close(fd)
+		c.safeConns.Del(fd)
 		c.mu.Unlock()
 		return
 	}
+
 	if n == len(*c.wbuf) {
+		// 全部写入成功
 		putBytes(c.wbuf)
 		c.wbuf = nil
-		c.eventLoop.ResetRead(int(fd))
+		// 不再需要写事件，只监听读事件
+		c.eventLoop.ResetRead(fd)
 	} else if n > 0 {
+		// 部分写入成功，更新缓冲区
 		copy(*c.wbuf, (*c.wbuf)[n:])
 		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
 	}
