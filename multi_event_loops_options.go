@@ -8,11 +8,12 @@ import (
 )
 
 var (
-	defMaxEventNum   = 256
-	defTaskMin       = 50
-	defTaskMax       = 30000
-	defTaskInitCount = 8
-	defNumLoops      = runtime.NumCPU()
+	defMaxEventNum             = 256
+	defTaskMin                 = 50
+	defTaskMax                 = 30000
+	defTaskInitCount           = 8
+	defNumLoops                = runtime.NumCPU()
+	defEventLoopReadBufferSize = 1024 * 4
 )
 
 type TaskType int
@@ -40,12 +41,13 @@ type taskConfig struct {
 
 // 边缘触发
 type Options[T any] struct {
-	callback    Callback[T]
-	decoder     Decoder[T]
-	task        taskConfig
-	level       slog.Level
-	taskType    TaskType
-	triggerType core.TriggerType
+	callback                Callback[T]
+	decoder                 Decoder[T]
+	task                    taskConfig
+	level                   slog.Level
+	taskType                TaskType
+	triggerType             core.TriggerType
+	eventLoopReadBufferSize int
 }
 
 // 设置回调函数
@@ -81,5 +83,12 @@ func WithTaskType[T any](taskType TaskType) func(*Options[T]) {
 func WithTriggerType[T any](triggerType core.TriggerType) func(*Options[T]) {
 	return func(o *Options[T]) {
 		o.triggerType = triggerType
+	}
+}
+
+// 设置event loop里面读buffer的大小
+func WithEventLoopReadBufferSize[T any](size int) func(*Options[T]) {
+	return func(o *Options[T]) {
+		o.eventLoopReadBufferSize = size
 	}
 }

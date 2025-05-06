@@ -42,6 +42,10 @@ func (m *MultiEventLoop[T]) initDefaultSetting() {
 	if m.options.task.initCount == 0 {
 		m.options.task.initCount = defTaskInitCount
 	}
+
+	if m.options.eventLoopReadBufferSize == 0 {
+		m.options.eventLoopReadBufferSize = defEventLoopReadBufferSize
+	}
 }
 
 func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T])) (e *MultiEventLoop[T], err error) {
@@ -52,11 +56,12 @@ func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T]))
 	e = &MultiEventLoop[T]{
 		eventLoops: eventLoops,
 	}
-	e.initDefaultSetting()
 
 	for _, option := range options {
 		option(&e.options)
 	}
+
+	e.initDefaultSetting()
 	for i := 0; i < runtime.NumCPU(); i++ {
 		eventLoops[i], err = core.Create(e.options.triggerType)
 		if err != nil {

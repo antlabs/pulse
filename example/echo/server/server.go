@@ -96,7 +96,8 @@ func main() {
 		pulse.WithLogLevel[[]byte](slog.LevelError),
 		pulse.WithTaskType[[]byte](pulse.TaskTypeInEventLoop),
 		pulse.WithTriggerType[[]byte](pulse.TriggerTypeEdge),
-	)
+		pulse.WithEventLoopReadBufferSize[[]byte](1024*4))
+
 	if err != nil {
 		panic(err.Error())
 	}
