@@ -40,6 +40,11 @@ func newConn(fd int, safeConns *safeConns[Conn], task selectTasks, taskType Task
 }
 
 func (c *Conn) Write(data []byte) (int, error) {
+	dataLen := len(data)
+	if dataLen == 0 {
+		return 0, nil
+	}
+
 	c.mu.Lock()
 	if c.wbuf == nil {
 		n, err := syscall.Write(c.getFd(), data)
@@ -47,12 +52,10 @@ func (c *Conn) Write(data []byte) (int, error) {
 			newBytes := getBytes(len(data))
 			*newBytes = (*newBytes)[:len(data)]
 			c.wbuf = newBytes
-			// newBytes := make([]byte, len(data))
-			// c.wbuf = &newBytes
 			if n > 0 {
 				// 部分写成功
-				copy(*c.wbuf, data[:n])
-				*c.wbuf = (*c.wbuf)[:n]
+				copy(*c.wbuf, data[n:])
+				*c.wbuf = (*c.wbuf)[:len(data)-n]
 			} else {
 				// 全部写失败
 				copy(*c.wbuf, data)
@@ -61,22 +64,47 @@ func (c *Conn) Write(data []byte) (int, error) {
 
 			c.eventLoop.AddWrite(c.getFd())
 			c.mu.Unlock()
-			return 0, nil
+			return n, nil
 		}
 		c.mu.Unlock()
 		return n, err
 	}
 
+	// 缓冲区已经存在，说明之前的写入还未完成
+	// 将本次数据追加到写缓冲区
+	originalBufferLen := len(*c.wbuf)
 	*c.wbuf = append(*c.wbuf, data...)
 
-	n, err := syscall.Write(int(c.getFd()), *c.wbuf)
-	if n == len(*c.wbuf) {
+	// 尝试写入缓冲区的所有数据
+	n, err := syscall.Write(c.getFd(), *c.wbuf)
+	if err != nil && err != unix.EAGAIN {
+		// 处理错误情况，确保不会泄漏内存
 		putBytes(c.wbuf)
 		c.wbuf = nil
+		c.mu.Unlock()
+		return 0, err
 	}
+
+	if n == len(*c.wbuf) {
+		// 全部写入成功
+		putBytes(c.wbuf)
+		c.wbuf = nil
+	} else if n > 0 {
+		// 部分写入成功，更新缓冲区
+		copy(*c.wbuf, (*c.wbuf)[n:])
+		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
+	}
+
 	c.mu.Unlock()
 
-	return n, err
+	// 计算有多少当前请求的数据被写入
+	if n <= originalBufferLen {
+		// 如果写入量小于等于原缓冲区大小，说明当前数据都未写入
+		return 0, nil
+	} else {
+		// 部分或全部被写入
+		return n - originalBufferLen, nil
+	}
 }
 
 func (c *Conn) flush() {
