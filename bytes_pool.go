@@ -40,7 +40,7 @@ func init() {
 
 const (
 	page     = 1024
-	maxIndex = 64
+	maxIndex = 128
 )
 
 var pools = make([]sync.Pool, 0, maxIndex)

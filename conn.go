@@ -53,6 +53,7 @@ func (c *Conn) close() {
 		putBytes(c.wbuf)
 		c.wbuf = nil
 	}
+	c.closed = true
 }
 
 func (c *Conn) Write(data []byte) (int, error) {
@@ -99,8 +100,6 @@ func (c *Conn) Write(data []byte) (int, error) {
 	n, err := syscall.Write(c.getFd(), *c.wbuf)
 	if err != nil {
 		if err == unix.EAGAIN || err == syscall.EINTR {
-			// 如果是临时错误，确保我们仍然注册了写事件
-			c.eventLoop.AddWrite(c.getFd())
 			c.mu.Unlock()
 			return 0, nil
 		}
@@ -119,8 +118,6 @@ func (c *Conn) Write(data []byte) (int, error) {
 		// 部分写入成功，更新缓冲区
 		copy(*c.wbuf, (*c.wbuf)[n:])
 		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
-
-		// c.eventLoop.AddWrite(c.getFd())
 	}
 
 	c.mu.Unlock()
@@ -144,8 +141,6 @@ func (c *Conn) flush() {
 	n, err := syscall.Write(fd, *c.wbuf)
 	if err != nil {
 		if err == unix.EAGAIN || err == syscall.EINTR {
-			// 临时错误，确保我们仍然注册了写事件
-			c.eventLoop.AddWrite(fd)
 			c.mu.Unlock()
 			return
 		}
