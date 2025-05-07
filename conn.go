@@ -125,7 +125,6 @@ func (c *Conn) Write(data []byte) (int, error) {
 		c.wbufList = append(c.wbufList, newBuf)
 	}
 
-	totalWritten := 0
 	lastIndex := 0
 	for i, wbuf := range c.wbufList {
 		n, err := c.writeToSocket(*wbuf)
@@ -141,22 +140,21 @@ func (c *Conn) Write(data []byte) (int, error) {
 				// 移动未处理的缓冲区到列表开始位置
 				copy(c.wbufList, c.wbufList[i:])
 				c.wbufList = c.wbufList[:len(c.wbufList)-i]
-				return totalWritten + n, nil
+				return len(data), nil
 			}
 			putBytes(wbuf)
 			lastIndex = i + 1
-			totalWritten += n
 			continue
 		}
 
 		// 发生严重错误
 		c.close()
-		return totalWritten + n, err
+		return 0, err
 	}
 
 	// 所有数据都已写入
 	c.wbufList = c.wbufList[:0]
-	return totalWritten, nil
+	return len(data), nil
 }
 
 func (c *Conn) flush() {
