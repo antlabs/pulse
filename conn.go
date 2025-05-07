@@ -140,8 +140,6 @@ func (c *Conn) Write(data []byte) (int, error) {
 		// 部分写入成功，更新缓冲区
 		copy(*c.wbuf, (*c.wbuf)[n:])
 		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
-		// 确保注册写事件
-		c.eventLoop.AddWrite(c.getFd())
 	}
 
 	c.mu.Unlock()
