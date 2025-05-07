@@ -3,6 +3,7 @@ package pulse
 import (
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -47,6 +48,10 @@ func (c *Conn) Close() {
 }
 
 func (c *Conn) close() {
+	if c.closed {
+		return
+	}
+
 	unix.Close(c.getFd())
 	c.safeConns.Del(c.getFd())
 	if c.wbuf != nil {
@@ -56,55 +61,72 @@ func (c *Conn) close() {
 	c.closed = true
 }
 
-func (c *Conn) Write(data []byte) (int, error) {
-	dataLen := len(data)
-	if dataLen == 0 {
-		return 0, nil
+// writeToSocket 尝试将数据写入 socket，并处理中断与临时错误
+func (c *Conn) writeToSocket(data []byte) (int, error) {
+	try := 3 //最多重试3次
+	var lastErr error
+
+	for i := 0; i < try; i++ {
+		n, err := syscall.Write(c.getFd(), data)
+		if err == nil {
+			return n, nil
+		}
+		if err == syscall.EINTR {
+			lastErr = err
+			continue // 被信号中断，重试
+		}
+		if err == unix.EAGAIN {
+			return 0, err // 资源暂时不可用
+		}
+		return n, err // 其他错误直接返回
 	}
 
+	// 如果重试用尽，返回最后的错误
+	return 0, lastErr
+}
+
+func (c *Conn) Write(data []byte) (int, error) {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
-		return 0, errors.New("connection closed")
+		return 0, net.ErrClosed
 	}
+
+	if len(data) == 0 && c.wbuf == nil {
+		c.mu.Unlock()
+		return 0, nil
+	}
+
 	if c.wbuf == nil {
-		n, err := syscall.Write(c.getFd(), data)
-		if err == unix.EAGAIN || err == syscall.EINTR {
-			// 资源暂时不可用或被信号中断，需要缓存数据
-			newBytes := getBytes(len(data))
-			*newBytes = (*newBytes)[:len(data)]
-			c.wbuf = newBytes
-			if n > 0 {
-				// 部分写成功
+		n, err := c.writeToSocket(data)
+		if errors.Is(err, unix.EAGAIN) || errors.Is(err, syscall.EINTR) || err == nil {
+			// 部分写入成功，或者全部失败
+			if n < len(data) {
+				c.wbuf = getBytes(len(data) - n)
 				copy(*c.wbuf, data[n:])
 				*c.wbuf = (*c.wbuf)[:len(data)-n]
-			} else {
-				// 全部写失败
-				copy(*c.wbuf, data)
-				*c.wbuf = (*c.wbuf)[:len(data)]
+				c.eventLoop.AddWrite(c.getFd())
 			}
 
-			// 注册写事件，当socket可写时会通知我们
-			c.eventLoop.AddWrite(c.getFd())
 			c.mu.Unlock()
 			return n, nil
 		}
+
+		// 发生严重错误
+		c.close()
 		c.mu.Unlock()
 		return n, err
 	}
 
-	// 将本次数据追加到写缓冲区
-	*c.wbuf = append(*c.wbuf, data...)
+	if len(data) > 0 {
+		// 将本次数据追加到写缓冲区
+		*c.wbuf = append(*c.wbuf, data...)
+	}
 
 	// 尝试写入缓冲区的所有数据
-	n, err := syscall.Write(c.getFd(), *c.wbuf)
-	if err != nil {
-		if err == unix.EAGAIN || err == syscall.EINTR {
-			c.mu.Unlock()
-			return 0, nil
-		}
-
-		// 处理其他错误情况，确保不会泄漏内存
+	n, err := c.writeToSocket(*c.wbuf)
+	if err != nil && !errors.Is(err, unix.EAGAIN) && !errors.Is(err, syscall.EINTR) {
+		// 严重错误，关闭连接
 		c.close()
 		c.mu.Unlock()
 		return 0, err
@@ -118,51 +140,16 @@ func (c *Conn) Write(data []byte) (int, error) {
 		// 部分写入成功，更新缓冲区
 		copy(*c.wbuf, (*c.wbuf)[n:])
 		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
+		// 确保注册写事件
+		c.eventLoop.AddWrite(c.getFd())
 	}
 
 	c.mu.Unlock()
-
-	return n, nil
+	return len(data), nil
 }
 
 func (c *Conn) flush() {
-	c.mu.Lock()
-	if c.wbuf == nil || len(*c.wbuf) == 0 {
-		c.mu.Unlock()
-		return
-	}
-
-	if c.closed {
-		c.mu.Unlock()
-		return
-	}
-
-	fd := c.getFd()
-	n, err := syscall.Write(fd, *c.wbuf)
-	if err != nil {
-		if err == unix.EAGAIN || err == syscall.EINTR {
-			c.mu.Unlock()
-			return
-		}
-
-		// 处理非临时错误：清理资源并关闭连接
-		c.close()
-		c.mu.Unlock()
-		return
-	}
-
-	if n == len(*c.wbuf) {
-		// 全部写入成功
-		putBytes(c.wbuf)
-		c.wbuf = nil
-		// 不再需要写事件，只监听读事件
-		c.eventLoop.ResetRead(fd)
-	} else if n > 0 {
-		// 部分写入成功，更新缓冲区
-		copy(*c.wbuf, (*c.wbuf)[n:])
-		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
-	}
-	c.mu.Unlock()
+	c.Write(nil)
 }
 
 // handleData 处理数据的逻辑
