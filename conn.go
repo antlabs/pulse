@@ -15,7 +15,7 @@ import (
 
 type Conn struct {
 	fd        int64
-	wbuf      *[]byte // write buffer, 为了理精细控制内存使用量
+	wbufList  []*[]byte // write buffer, 为了理精细控制内存使用量
 	mu        sync.Mutex
 	safeConns *safeConns[Conn]
 	task      driver.TaskExecutor
@@ -54,10 +54,10 @@ func (c *Conn) close() {
 
 	unix.Close(c.getFd())
 	c.safeConns.Del(c.getFd())
-	if c.wbuf != nil {
-		putBytes(c.wbuf)
-		c.wbuf = nil
+	for _, wbuf := range c.wbufList {
+		putBytes(wbuf)
 	}
+	c.wbufList = c.wbufList[:0]
 	c.closed = true
 }
 
@@ -87,63 +87,76 @@ func (c *Conn) writeToSocket(data []byte) (int, error) {
 
 func (c *Conn) Write(data []byte) (int, error) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.closed {
-		c.mu.Unlock()
 		return 0, net.ErrClosed
 	}
 
-	if len(data) == 0 && c.wbuf == nil {
-		c.mu.Unlock()
+	if len(data) == 0 && len(c.wbufList) == 0 {
 		return 0, nil
 	}
 
-	if c.wbuf == nil {
+	if len(c.wbufList) == 0 {
 		n, err := c.writeToSocket(data)
 		if errors.Is(err, unix.EAGAIN) || errors.Is(err, syscall.EINTR) || err == nil {
 			// 部分写入成功，或者全部失败
 			if n < len(data) {
-				c.wbuf = getBytes(len(data) - n)
-				copy(*c.wbuf, data[n:])
-				*c.wbuf = (*c.wbuf)[:len(data)-n]
+				newBuf := getBytes(len(data) - n)
+				copy(*newBuf, data[n:])
+				c.wbufList = append(c.wbufList, newBuf)
 				c.eventLoop.AddWrite(c.getFd())
 			}
-
-			c.mu.Unlock()
 			return n, nil
 		}
 
 		// 发生严重错误
 		c.close()
-		c.mu.Unlock()
 		return n, err
 	}
 
 	if len(data) > 0 {
-		// 将本次数据追加到写缓冲区
-		*c.wbuf = append(*c.wbuf, data...)
+		newBuf := getBytes(len(data))
+		copy(*newBuf, data)
+		if cap(*newBuf) < len(data) {
+			panic("newBuf cap is less than data")
+		}
+		*newBuf = (*newBuf)[:len(data)]
+		c.wbufList = append(c.wbufList, newBuf)
 	}
 
-	// 尝试写入缓冲区的所有数据
-	n, err := c.writeToSocket(*c.wbuf)
-	if err != nil && !errors.Is(err, unix.EAGAIN) && !errors.Is(err, syscall.EINTR) {
-		// 严重错误，关闭连接
+	totalWritten := 0
+	lastIndex := 0
+	for i, wbuf := range c.wbufList {
+		n, err := c.writeToSocket(*wbuf)
+		if errors.Is(err, unix.EAGAIN) || errors.Is(err, syscall.EINTR) || err == nil {
+			if n < len(*wbuf) {
+				// 部分写入，移动剩余数据到缓冲区开始位置
+				copy(*wbuf, (*wbuf)[n:])
+				*wbuf = (*wbuf)[:len(*wbuf)-n]
+				// 释放已处理完的缓冲区
+				for j := lastIndex; j < i; j++ {
+					putBytes(c.wbufList[j])
+				}
+				// 移动未处理的缓冲区到列表开始位置
+				copy(c.wbufList, c.wbufList[i:])
+				c.wbufList = c.wbufList[:len(c.wbufList)-i]
+				return totalWritten + n, nil
+			}
+			putBytes(wbuf)
+			lastIndex = i + 1
+			totalWritten += n
+			continue
+		}
+
+		// 发生严重错误
 		c.close()
-		c.mu.Unlock()
-		return 0, err
+		return totalWritten + n, err
 	}
 
-	if n == len(*c.wbuf) {
-		// 全部写入成功
-		putBytes(c.wbuf)
-		c.wbuf = nil
-	} else if n > 0 {
-		// 部分写入成功，更新缓冲区
-		copy(*c.wbuf, (*c.wbuf)[n:])
-		*c.wbuf = (*c.wbuf)[:len(*c.wbuf)-n]
-	}
-
-	c.mu.Unlock()
-	return len(data), nil
+	// 所有数据都已写入
+	c.wbufList = c.wbufList[:0]
+	return totalWritten, nil
 }
 
 func (c *Conn) flush() {
@@ -195,5 +208,5 @@ func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
 }
 
 func (c *Conn) needFlush() bool {
-	return c.wbuf != nil && len(*c.wbuf) > 0
+	return len(c.wbufList) > 0
 }
