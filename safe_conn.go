@@ -28,8 +28,8 @@ type safeConns[T any] struct {
 	len      uintptr
 }
 
-func (s *safeConns[T]) init() {
-	s.conns = make([]*T, 1000000) // 100w个指针
+func (s *safeConns[T]) init(max int) {
+	s.conns = make([]*T, max)
 	s.connsPtr = &s.conns[0]
 }
 
@@ -39,6 +39,7 @@ func (s *safeConns[T]) Add(fd int, c *T) {
 	}
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if fd >= len(s.conns) {
 		if fd >= cap(s.conns) {
 			newConns := make([]*T, max(int(float64(len(s.conns))*1.25), fd+1))
@@ -54,7 +55,6 @@ func (s *safeConns[T]) Add(fd int, c *T) {
 	atomic.StoreUintptr(&s.len, uintptr(len(s.conns)))
 
 	s.addInner(fd, c)
-	s.mu.Unlock()
 }
 
 func add(base unsafe.Pointer, index uintptr) unsafe.Pointer {

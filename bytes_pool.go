@@ -79,6 +79,7 @@ func getBytes(n int) (rv *[]byte) {
 }
 
 func putBytes(bytes *[]byte) {
+
 	if bytes == nil || cap(*bytes) == 0 {
 		return
 	}
@@ -97,6 +98,7 @@ func putBytes(bytes *[]byte) {
 	if cap(*bytes)%page != 0 {
 		index-- // 向前挪一格, 可以保证空间是够的
 	}
+	// fmt.Printf("putBytes index: %d\n", index)
 	smallPools[index].Put(bytes)
 }
 
@@ -106,13 +108,6 @@ var bigPools = make([]sync.Pool, 0, 4)
 var bigPoolsSize = []int{
 	512 * 1024,
 	1024 * 1024,
-	2 * 1024 * 1024,
-	3 * 1024 * 1024,
-	4 * 1024 * 1024,
-	5 * 1024 * 1024,
-	6 * 1024 * 1024,
-	7 * 1024 * 1024,
-	8 * 1024 * 1024,
 }
 
 func init() {

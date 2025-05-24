@@ -77,7 +77,7 @@ func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T]))
 func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 	slog.Debug("listenAndServe", "addr", addr)
 	var safeConns safeConns[Conn]
-	safeConns.init()
+	safeConns.init(maxFd)
 
 	l, err := net.Listen("tcp", addr)
 	if err != nil {

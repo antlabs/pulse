@@ -52,7 +52,7 @@ func (c *Conn) close() {
 		return
 	}
 
-	unix.Close(c.getFd())
+	syscall.Close(c.getFd())
 	c.safeConns.Del(c.getFd())
 	for _, wbuf := range c.wbufList {
 		putBytes(wbuf)
@@ -75,7 +75,7 @@ func (c *Conn) writeToSocket(data []byte) (int, error) {
 			lastErr = err
 			continue // 被信号中断，重试
 		}
-		if err == unix.EAGAIN {
+		if err == syscall.EAGAIN {
 			return 0, err // 资源暂时不可用
 		}
 		return n, err // 其他错误直接返回

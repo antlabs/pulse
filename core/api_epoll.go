@@ -79,7 +79,7 @@ func Create(triggerType TriggerType) (la PollingApi, err error) {
 	}
 
 	slog.Info("create epoll", "triggerType", triggerType)
-	e.events = make([]syscall.EpollEvent, 1024)
+	e.events = make([]syscall.EpollEvent, 10240)
 	e.rev, e.wev, e.dwEv, e.resetEv = getReadWriteDeleteReset(triggerType == TriggerTypeEdge)
 	return &e, nil
 }
