@@ -98,6 +98,10 @@ func (s *safeConns[T]) Del(fd int) {
 }
 
 func (s *safeConns[T]) Get(fd int) *T {
+	return s.conns[fd]
+}
+
+func (s *safeConns[T]) Get2(fd int) *T {
 	if fd == -1 {
 		return nil
 	}

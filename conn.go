@@ -3,6 +3,7 @@ package pulse
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -20,7 +21,23 @@ type Conn struct {
 	safeConns *safeConns[Conn]
 	task      driver.TaskExecutor
 	eventLoop core.PollingApi
-	closed    bool
+}
+
+func (c *Conn) SetNoDelay(nodelay bool) error {
+	if nodelay {
+		return syscall.SetsockoptInt(
+			c.getFd(),
+			syscall.IPPROTO_TCP,
+			syscall.TCP_NODELAY,
+			1,
+		)
+	}
+	return syscall.SetsockoptInt(
+		c.getFd(),
+		syscall.IPPROTO_TCP,
+		syscall.TCP_NODELAY,
+		0,
+	)
 }
 
 func (c *Conn) getFd() int {
@@ -48,17 +65,19 @@ func (c *Conn) Close() {
 }
 
 func (c *Conn) close() {
-	if c.closed {
+	if atomic.LoadInt64(&c.fd) == -1 {
 		return
 	}
 
-	syscall.Close(c.getFd())
-	c.safeConns.Del(c.getFd())
+	oldFd := atomic.SwapInt64(&c.fd, -1)
+	if oldFd != -1 {
+		c.safeConns.Del(int(oldFd))
+		syscall.Close(int(oldFd))
+	}
 	for _, wbuf := range c.wbufList {
 		putBytes(wbuf)
 	}
 	c.wbufList = c.wbufList[:0]
-	c.closed = true
 }
 
 // writeToSocket 尝试将数据写入 socket，并处理中断与临时错误
@@ -89,7 +108,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.closed {
+	if atomic.LoadInt64(&c.fd) == -1 {
 		return 0, net.ErrClosed
 	}
 
@@ -163,6 +182,22 @@ func (c *Conn) flush() {
 
 // handleData 处理数据的逻辑
 func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
+
+	if options.taskType == TaskTypeInEventLoop {
+		if options.decoder == nil {
+			// 快速路径，直接调用回调函数
+			options.callback.OnData(c, any(rawData).(T))
+			return
+		}
+		decodedData, _, err := options.decoder.Decode(rawData)
+		if err == nil {
+			options.callback.OnData(c, decodedData)
+		} else {
+			slog.Error("decode error", "err", err)
+		}
+		return
+	}
+
 	var data T
 
 	var newBytes *[]byte
@@ -182,18 +217,13 @@ func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
 			fmt.Println("Type assertion failed for raw data")
 			return
 		}
-		if options.taskType != TaskTypeInEventLoop {
-			newBytes = getBytes(len(rawData))
-			copy(*newBytes, rawData)
-			*newBytes = (*newBytes)[:len(rawData)]
-			data = any(*newBytes).(T)
-		} else {
-			data = any(rawData).(T)
-		}
+		newBytes = getBytes(len(rawData))
+		copy(*newBytes, rawData)
+		*newBytes = (*newBytes)[:len(rawData)]
+		data = any(*newBytes).(T)
 	}
 
 	// 进入协程池
-	// options.callback.OnData(c, data)
 	c.task.AddTask(&c.mu, func() bool {
 		options.callback.OnData(c, data)
 		// 释放newBytes

@@ -123,26 +123,30 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 			for {
 				eventLoop.Poll(0, func(fd int, state core.State, err error) {
 
-					slog.Debug("poll", "fd", fd, "state", state, "err", err)
+					c := safeConns.Get(fd)
+					// slog.Debug("poll", "fd", fd, "state", state, "err", err)
 					if err != nil {
 						if errors.Is(err, unix.EAGAIN) {
 							return
 						}
-						unix.Close(fd)
-						safeConns.Del(fd)
+						if c != nil {
+							c.Close()
+						}
 						return
 					}
 
-					c := safeConns.Get(fd)
 					if c == nil {
 						c = newConn(fd, &safeConns, e.localTask, e.options.taskType, eventLoop)
 						safeConns.Add(fd, c)
 					}
 
+					if c.needFlush() && state.IsWrite() {
+						c.flush()
+					}
 					if state.IsRead() {
 						for {
 							// 循环读取数据
-							n, err := syscall.Read(fd, rbuf)
+							n, err := syscall.Read(c.getFd(), rbuf)
 							if err != nil {
 								// EAGAIN表示没有数据
 								if errors.Is(err, unix.EAGAIN) {
@@ -153,27 +157,18 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 									continue
 								}
 								// 如果不是这个错误直接关闭连接
-								unix.Close(fd)
-								safeConns.Del(fd)
+								c.Close()
 								return
 							}
 
 							if n == 0 {
 								slog.Info("read 0 bytes", "fd", fd, "state", state.String(), "err", err)
-								unix.Close(fd)
-								safeConns.Del(fd)
+								c.Close()
 								break
-							}
-							if n < 0 {
-								panic("read n < 0")
 							}
 
 							handleData(c, &e.options, rbuf[:n])
 						}
-					}
-
-					if c.needFlush() && state.IsWrite() {
-						c.flush()
 					}
 
 				})
