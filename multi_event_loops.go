@@ -146,7 +146,9 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 					if state.IsRead() {
 						for {
 							// 循环读取数据
+							c.mu.Lock()
 							n, err := syscall.Read(c.getFd(), rbuf)
+							c.mu.Unlock()
 							if err != nil {
 								// EAGAIN表示没有数据
 								if errors.Is(err, unix.EAGAIN) {
