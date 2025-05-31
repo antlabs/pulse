@@ -19,7 +19,7 @@ var (
 type TaskType int
 
 const (
-	// 在业务协程中执行
+	// 在业务协程池中执行
 	TaskTypeInBusinessGoroutine TaskType = iota
 	// 在event loop中执行
 	TaskTypeInEventLoop

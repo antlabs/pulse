@@ -13,7 +13,6 @@ import (
 
 	"github.com/antlabs/pulse/core"
 	"github.com/antlabs/pulse/task/driver"
-	_ "github.com/antlabs/pulse/task/io"
 	_ "github.com/antlabs/pulse/task/stream"
 	_ "github.com/antlabs/pulse/task/stream2"
 	"golang.org/x/sys/unix"

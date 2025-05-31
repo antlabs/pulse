@@ -109,26 +109,19 @@ func (as *eventPollState) Poll(tv time.Duration, cb func(int, State, error)) (re
 			ev := &as.events[j]
 			fd := int(ev.Ident)
 
-			isRead := ev.Filter == unix.EVFILT_READ
-			isWrite := ev.Filter == unix.EVFILT_WRITE
-			if isRead {
-				cb(fd, READ, nil)
-				if err != nil {
-					cb(fd, WRITE, io.EOF)
-					continue
-				}
-			}
-
-			if isWrite {
-				// 刷新下直接写入失败的数据
-				cb(fd, WRITE, nil)
-			}
-
 			if ev.Flags&unix.EV_EOF != 0 {
 				cb(fd, WRITE, io.EOF)
 				continue
 			}
 
+			var state State
+			if ev.Filter == unix.EVFILT_READ {
+				state |= READ
+			}
+			if ev.Filter == unix.EVFILT_WRITE {
+				state |= WRITE
+			}
+			cb(fd, state, nil)
 		}
 	}
 	return retVal, nil

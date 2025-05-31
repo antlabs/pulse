@@ -44,16 +44,21 @@ func (c *Conn) getFd() int {
 	return int(atomic.LoadInt64(&c.fd))
 }
 func newConn(fd int, safeConns *safeConns[Conn], task selectTasks, taskType TaskType, eventLoop core.PollingApi) *Conn {
-	taskName := "stream2"
+	var taskExecutor driver.TaskExecutor
 	if taskType == TaskTypeInConnectionGoroutine {
-		taskName = "stream"
+		taskExecutor = task.newTask("stream")
 	} else if taskType == TaskTypeInEventLoop {
-		taskName = "io"
+		// 不做任何事情
+	} else if taskType == TaskTypeInBusinessGoroutine {
+		taskExecutor = task.newTask("stream2")
+	} else {
+		panic("invalid task type")
 	}
+
 	return &Conn{
 		fd:        int64(fd),
 		safeConns: safeConns,
-		task:      task.newTask(taskName),
+		task:      taskExecutor,
 		eventLoop: eventLoop,
 	}
 }
