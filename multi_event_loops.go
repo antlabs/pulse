@@ -15,7 +15,6 @@ import (
 	"github.com/antlabs/pulse/task/driver"
 	_ "github.com/antlabs/pulse/task/stream"
 	_ "github.com/antlabs/pulse/task/stream2"
-	"golang.org/x/sys/unix"
 )
 
 type MultiEventLoop[T any] struct {
@@ -125,7 +124,7 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 					c := safeConns.Get(fd)
 					// slog.Debug("poll", "fd", fd, "state", state, "err", err)
 					if err != nil {
-						if errors.Is(err, unix.EAGAIN) {
+						if errors.Is(err, core.EAGAIN) {
 							return
 						}
 						if c != nil {
@@ -146,11 +145,11 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 						for {
 							// 循环读取数据
 							c.mu.Lock()
-							n, err := syscall.Read(c.getFd(), rbuf)
+							n, err := core.Read(c.getFd(), rbuf)
 							c.mu.Unlock()
 							if err != nil {
 								// EAGAIN表示没有数据
-								if errors.Is(err, unix.EAGAIN) {
+								if errors.Is(err, core.EAGAIN) {
 									return
 								}
 

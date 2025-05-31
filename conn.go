@@ -11,7 +11,6 @@ import (
 
 	"github.com/antlabs/pulse/core"
 	"github.com/antlabs/pulse/task/driver"
-	"golang.org/x/sys/unix"
 )
 
 type Conn struct {
@@ -24,20 +23,7 @@ type Conn struct {
 }
 
 func (c *Conn) SetNoDelay(nodelay bool) error {
-	if nodelay {
-		return syscall.SetsockoptInt(
-			c.getFd(),
-			syscall.IPPROTO_TCP,
-			syscall.TCP_NODELAY,
-			1,
-		)
-	}
-	return syscall.SetsockoptInt(
-		c.getFd(),
-		syscall.IPPROTO_TCP,
-		syscall.TCP_NODELAY,
-		0,
-	)
+	return core.SetNoDelay(c.getFd(), nodelay)
 }
 
 func (c *Conn) getFd() int {
@@ -77,7 +63,7 @@ func (c *Conn) close() {
 	oldFd := atomic.SwapInt64(&c.fd, -1)
 	if oldFd != -1 {
 		c.safeConns.Del(int(oldFd))
-		syscall.Close(int(oldFd))
+		core.Close(int(oldFd))
 	}
 	for _, wbuf := range c.wbufList {
 		putBytes(wbuf)
@@ -91,7 +77,7 @@ func (c *Conn) writeToSocket(data []byte) (int, error) {
 	var lastErr error
 
 	for i := 0; i < try; i++ {
-		n, err := syscall.Write(c.getFd(), data)
+		n, err := core.Write(c.getFd(), data)
 		if err == nil {
 			return n, nil
 		}
@@ -123,7 +109,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 
 	if len(c.wbufList) == 0 {
 		n, err := c.writeToSocket(data)
-		if errors.Is(err, unix.EAGAIN) || errors.Is(err, syscall.EINTR) || err == nil {
+		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil {
 			// 部分写入成功，或者全部失败
 			if n < len(data) {
 				newBuf := getBytes(len(data) - n)
@@ -152,7 +138,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 	lastIndex := 0
 	for i, wbuf := range c.wbufList {
 		n, err := c.writeToSocket(*wbuf)
-		if errors.Is(err, unix.EAGAIN) || errors.Is(err, syscall.EINTR) || err == nil {
+		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil {
 			if n < len(*wbuf) {
 				// 部分写入，移动剩余数据到缓冲区开始位置
 				copy(*wbuf, (*wbuf)[n:])

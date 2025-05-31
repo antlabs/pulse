@@ -3,10 +3,8 @@ package main
 import (
 	"errors"
 	"log/slog"
-	"syscall"
 
 	"github.com/antlabs/pulse/core"
-	"golang.org/x/sys/unix"
 )
 
 func main() {
@@ -23,27 +21,27 @@ func main() {
 		as.Poll(-1, func(fd int, state core.State, err error) {
 			slog.Info("poll", "fd", fd, "state", state.String(), "err", err)
 			if err != nil {
-				if errors.Is(err, unix.EAGAIN) {
+				if errors.Is(err, core.EAGAIN) {
 					return
 				}
-				unix.Close(fd)
+				core.Close(fd)
 				return
 			}
 
 			if state.IsRead() {
 				var buf [1024]byte
 				for {
-					n, err := unix.Read(fd, buf[:])
+					n, err := core.Read(fd, buf[:])
 					if err != nil {
-						if errors.Is(err, unix.EAGAIN) {
+						if errors.Is(err, core.EAGAIN) {
 							return
 						}
-						unix.Close(fd)
+						core.Close(fd)
 						return
 					}
 					if n > 0 {
 						// TODO 这里没有处理 EAGAIN
-						syscall.Write(fd, buf[:n])
+						core.Write(fd, buf[:n])
 					} else {
 						slog.Info("read", "fd", fd, "state", state.String(), "err", err)
 					}
@@ -51,7 +49,7 @@ func main() {
 			}
 
 			if state.IsWrite() {
-				syscall.Write(fd, []byte("hello client"))
+				core.Write(fd, []byte("hello client"))
 			}
 		})
 	}

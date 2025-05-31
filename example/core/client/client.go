@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"reflect"
-	"syscall"
 	"time"
 
 	"github.com/antlabs/pulse/core"
@@ -29,7 +28,7 @@ func main() {
 		return
 	}
 
-	syscall.Write(fd, []byte("hello"))
+	core.Write(fd, []byte("hello"))
 	as.Poll(time.Second*10, func(fd int, state core.State, err error) {
 		if err != nil {
 			return
