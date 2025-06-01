@@ -2,7 +2,13 @@
 
 package core
 
-import "syscall"
+import (
+	"errors"
+	"net"
+	"syscall"
+
+	"golang.org/x/sys/unix"
+)
 
 func Write(fd int, p []byte) (n int, err error) {
 	return syscall.Write(fd, p)
@@ -37,3 +43,30 @@ const (
 	EAGAIN = syscall.EAGAIN
 	EINTR  = syscall.EINTR
 )
+
+// 复制一份socket
+func GetFdFromConn(c net.Conn) (newFd int, err error) {
+	sc, ok := c.(interface {
+		SyscallConn() (syscall.RawConn, error)
+	})
+	if !ok {
+		return 0, errors.New("RawConn Unsupported")
+	}
+	rc, err := sc.SyscallConn()
+	if err != nil {
+		return 0, errors.New("RawConn Unsupported")
+	}
+
+	err = rc.Control(func(fd uintptr) {
+		newFd = int(fd)
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return duplicateSocket(int(newFd))
+}
+
+func duplicateSocket(socketFD int) (int, error) {
+	return unix.Dup(socketFD)
+}

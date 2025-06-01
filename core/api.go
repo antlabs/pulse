@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -99,49 +98,4 @@ func Accept(network, addr string, e PollingApi) error {
 		}
 	}
 
-}
-
-// // 复制一份socket
-// func GetFdFromConn(c net.Conn) (newFd int, err error) {
-// 	sc, ok := c.(interface {
-// 		SyscallConn() (syscall.RawConn, error)
-// 	})
-// 	if !ok {
-// 		return 0, errors.New("RawConn Unsupported")
-// 	}
-// 	rc, err := sc.SyscallConn()
-// 	if err != nil {
-// 		return 0, errors.New("RawConn Unsupported")
-// 	}
-
-// 	err = rc.Control(func(fd uintptr) {
-// 		newFd = int(fd)
-// 	})
-// 	if err != nil {
-// 		return 0, err
-// 	}
-
-// 	return duplicateSocket(int(newFd))
-// }
-
-// func duplicateSocket(socketFD int) (int, error) {
-// 	return unix.Dup(socketFD)
-// }
-
-func GetFdFromConn(conn net.Conn) (fd int, err error) {
-	// 类型断言为 *net.TCPConn 或其他具体类型
-	tcpConn, ok := conn.(*net.TCPConn)
-	if !ok {
-		return 0, fmt.Errorf("not a TCP connection")
-	}
-
-	// 获取底层的 *os.File
-	file, err := tcpConn.File()
-	if err != nil {
-		return 0, err
-	}
-	defer file.Close() // 注意：Close 会复制文件描述符，避免影响原连接
-
-	// 获取文件描述符
-	return int(file.Fd()), nil
 }

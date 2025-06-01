@@ -8,7 +8,6 @@ import (
 	"os"
 	"runtime"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/antlabs/pulse/core"
@@ -75,7 +74,7 @@ func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T]))
 func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 	slog.Debug("listenAndServe", "addr", addr)
 	var safeConns safeConns[Conn]
-	safeConns.init(maxFd)
+	safeConns.init(core.GetMaxFd())
 
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -89,7 +88,9 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 
 	go func() {
 		defer wg.Done()
-		for {
+		// 统计每个eventLoop的连接数
+		count := make([]int, len(e.eventLoops))
+		for i := 0; ; i++ {
 			c, err := l.Accept()
 			if err != nil {
 				// TODO 优化
@@ -102,8 +103,15 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 				slog.Error("getFdFromConn", "err", err)
 				continue
 			}
+			c.Close()
 
-			index := fd % len(e.eventLoops)
+			// 轮询分配到eventLoop
+			index := i % len(e.eventLoops)
+			// index := fd % len(e.eventLoops)
+			count[index]++
+
+			c2 := newConn(fd, &safeConns, e.localTask, e.options.taskType, e.eventLoops[index])
+			safeConns.Add(fd, c2)
 			err = e.eventLoops[index].AddRead(fd)
 			if err != nil {
 				slog.Error("addRead", "err", err)
@@ -116,12 +124,12 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 		eventLoop := eventLoop
 		go func() {
 			defer wg.Done()
-			rbuf := make([]byte, 1024*4)
 
+			rbuf := make([]byte, e.options.eventLoopReadBufferSize)
 			for {
 				eventLoop.Poll(0, func(fd int, state core.State, err error) {
 
-					c := safeConns.Get(fd)
+					c := safeConns.GetUnsafe(fd)
 					// slog.Debug("poll", "fd", fd, "state", state, "err", err)
 					if err != nil {
 						if errors.Is(err, core.EAGAIN) {
@@ -134,41 +142,14 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 					}
 
 					if c == nil {
-						c = newConn(fd, &safeConns, e.localTask, e.options.taskType, eventLoop)
-						safeConns.Add(fd, c)
+						panic("c is nil")
 					}
 
-					if c.needFlush() && state.IsWrite() {
+					if state.IsWrite() && c.needFlush() {
 						c.flush()
 					}
 					if state.IsRead() {
-						for {
-							// 循环读取数据
-							c.mu.Lock()
-							n, err := core.Read(c.getFd(), rbuf)
-							c.mu.Unlock()
-							if err != nil {
-								// EAGAIN表示没有数据
-								if errors.Is(err, core.EAGAIN) {
-									return
-								}
-
-								if errors.Is(err, syscall.EINTR) {
-									continue
-								}
-								// 如果不是这个错误直接关闭连接
-								c.Close()
-								return
-							}
-
-							if n == 0 {
-								slog.Info("read 0 bytes", "fd", fd, "state", state.String(), "err", err)
-								c.Close()
-								break
-							}
-
-							handleData(c, &e.options, rbuf[:n])
-						}
+						e.doRead(c, rbuf)
 					}
 
 				})
@@ -177,6 +158,37 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 		}()
 	}
 	return nil
+}
+
+func (e *MultiEventLoop[T]) doRead(c *Conn, rbuf []byte) {
+	for {
+		// 循环读取数据
+		c.mu.Lock()
+		n, err := core.Read(c.getFd(), rbuf)
+		c.mu.Unlock()
+		if err != nil {
+			if errors.Is(err, core.EINTR) {
+				continue
+			}
+
+			// EAGAIN表示没有数据
+			if errors.Is(err, core.EAGAIN) {
+				return
+			}
+
+			// 如果不是这个错误直接关闭连接
+			c.Close()
+			return
+		}
+
+		if n > 0 {
+			handleData(c, &e.options, rbuf[:n])
+		}
+
+		if n < len(rbuf) {
+			break
+		}
+	}
 }
 
 func (e *MultiEventLoop[T]) Free() {

@@ -37,8 +37,8 @@ const (
 	etDelWrite  = int(0)
 	etResetRead = int(0)
 
-	// TODO
-	ltRead      = int(syscall.EPOLLIN | syscall.EPOLLRDHUP | syscall.EPOLLHUP | syscall.EPOLLERR)
+	// 水平触发
+	ltRead      = int(syscall.EPOLLIN | syscall.EPOLLRDHUP | syscall.EPOLLHUP | syscall.EPOLLERR | syscall.EPOLLPRI)
 	ltWrite     = int(ltRead | syscall.EPOLLOUT)
 	ltDelWrite  = int(ltRead)
 	ltResetRead = int(ltRead)
@@ -79,7 +79,7 @@ func Create(triggerType TriggerType) (la PollingApi, err error) {
 	}
 
 	slog.Info("create epoll", "triggerType", triggerType)
-	e.events = make([]syscall.EpollEvent, 10240)
+	e.events = make([]syscall.EpollEvent, 1024)
 	e.rev, e.wev, e.dwEv, e.resetEv = getReadWriteDeleteReset(triggerType == TriggerTypeEdge)
 	return &e, nil
 }
@@ -139,13 +139,13 @@ func (e *eventPollState) Del(fd int) error {
 }
 
 // 事件循环
-func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err error)) (retVal int, err error) {
+func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err error)) (numEvents int, err error) {
 	msec := -1
 	if tv > 0 {
 		msec = int(tv) / int(time.Millisecond)
 	}
 
-	retVal, err = syscall.EpollWait(e.epfd, e.events, msec)
+	numEvents, err = syscall.EpollWait(e.epfd, e.events, msec)
 	if err != nil {
 		if errors.Is(err, syscall.EINTR) {
 			return 0, nil
@@ -153,30 +153,25 @@ func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err
 		return 0, err
 	}
 
-	numEvents := 0
-	if retVal > 0 {
-		numEvents = retVal
-		for i := 0; i < numEvents; i++ {
-			ev := &e.events[i]
-			fd := ev.Fd
+	for i := 0; i < numEvents; i++ {
+		ev := &e.events[i]
+		fd := ev.Fd
 
-			// unix.EPOLLRDHUP是关闭事件，遇到直接关闭
-			if ev.Events&(syscall.EPOLLERR|syscall.EPOLLHUP|syscall.EPOLLRDHUP) > 0 {
-				cb(int(fd), WRITE|READ, io.EOF)
-				continue
-			}
-			var state State
-
-			if ev.Events&processRead > 0 {
-				state |= READ
-			}
-			if ev.Events&processWrite > 0 {
-				state |= WRITE
-			}
-
-			cb(int(fd), state, nil)
-
+		// unix.EPOLLRDHUP是关闭事件，遇到直接关闭
+		if ev.Events&(syscall.EPOLLERR|syscall.EPOLLHUP|syscall.EPOLLRDHUP) > 0 {
+			cb(int(fd), WRITE|READ, io.EOF)
+			continue
 		}
+		var state State
+
+		if ev.Events&processRead > 0 {
+			state |= READ
+		}
+		if ev.Events&processWrite > 0 {
+			state |= WRITE
+		}
+
+		cb(int(fd), state, nil)
 
 	}
 

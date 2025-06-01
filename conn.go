@@ -111,6 +111,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 		n, err := c.writeToSocket(data)
 		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil {
 			// 部分写入成功，或者全部失败
+			// 把剩余数据放到缓冲区
 			if n < len(data) {
 				newBuf := getBytes(len(data) - n)
 				copy(*newBuf, data[n:])
@@ -164,6 +165,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 
 	// 所有数据都已写入
 	c.wbufList = c.wbufList[:0]
+	c.eventLoop.ResetRead(c.getFd())
 	return len(data), nil
 }
 
@@ -227,5 +229,7 @@ func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
 }
 
 func (c *Conn) needFlush() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return len(c.wbufList) > 0
 }

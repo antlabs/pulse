@@ -4,4 +4,4 @@
 # 支持平台
 * linux
 * mac
-* windows(TODO)
+* windows(TODO-开发中)

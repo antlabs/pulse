@@ -1,6 +1,6 @@
 //go:build unix || darwin || linux
 
-package pulse
+package core
 
 import "syscall"
 

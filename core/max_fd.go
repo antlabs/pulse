@@ -1,5 +1,5 @@
 //go:build windows
 
-package pulse
+package core
 
 const maxFd = 10000
