@@ -8,18 +8,21 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/antlabs/pulse/core"
 	"github.com/antlabs/pulse/task/driver"
 )
 
 type Conn struct {
-	fd        int64
-	wbufList  []*[]byte // write buffer, 为了理精细控制内存使用量
-	mu        sync.Mutex
-	safeConns *safeConns[Conn]
-	task      driver.TaskExecutor
-	eventLoop core.PollingApi
+	fd         int64
+	wbufList   []*[]byte // write buffer, 为了理精细控制内存使用量
+	mu         sync.Mutex
+	safeConns  *safeConns[Conn]
+	task       driver.TaskExecutor
+	eventLoop  core.PollingApi
+	readTimer  *time.Timer
+	writeTimer *time.Timer
 }
 
 func (c *Conn) SetNoDelay(nodelay bool) error {
@@ -58,6 +61,16 @@ func (c *Conn) Close() {
 func (c *Conn) close() {
 	if atomic.LoadInt64(&c.fd) == -1 {
 		return
+	}
+
+	// Stop timers
+	if c.readTimer != nil {
+		c.readTimer.Stop()
+		c.readTimer = nil
+	}
+	if c.writeTimer != nil {
+		c.writeTimer.Stop()
+		c.writeTimer = nil
 	}
 
 	oldFd := atomic.SwapInt64(&c.fd, -1)
@@ -232,4 +245,94 @@ func (c *Conn) needFlush() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.wbufList) > 0
+}
+
+func (c *Conn) SetDeadline(t time.Time) error {
+	c.mu.Lock()
+
+	if atomic.LoadInt64(&c.fd) == -1 {
+		c.mu.Unlock()
+		return net.ErrClosed
+	}
+	c.mu.Unlock()
+
+	// Set both read and write deadlines
+	if err := c.SetReadDeadline(t); err != nil {
+		return err
+	}
+	return c.SetWriteDeadline(t)
+}
+
+func (c *Conn) SetReadDeadline(t time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if atomic.LoadInt64(&c.fd) == -1 {
+		return net.ErrClosed
+	}
+
+	// Stop existing timer if any
+	if c.readTimer != nil {
+		c.readTimer.Stop()
+		c.readTimer = nil
+	}
+
+	// If t is zero, we're clearing the deadline
+	if t.IsZero() {
+		return nil
+	}
+
+	// Create new timer
+	duration := time.Until(t)
+	if duration <= 0 {
+		c.close()
+		return nil
+	}
+
+	c.readTimer = time.AfterFunc(duration, func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if atomic.LoadInt64(&c.fd) != -1 {
+			c.close()
+		}
+	})
+
+	return nil
+}
+
+func (c *Conn) SetWriteDeadline(t time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if atomic.LoadInt64(&c.fd) == -1 {
+		return net.ErrClosed
+	}
+
+	// Stop existing timer if any
+	if c.writeTimer != nil {
+		c.writeTimer.Stop()
+		c.writeTimer = nil
+	}
+
+	// If t is zero, we're clearing the deadline
+	if t.IsZero() {
+		return nil
+	}
+
+	// Create new timer
+	duration := time.Until(t)
+	if duration <= 0 {
+		c.close()
+		return nil
+	}
+
+	c.writeTimer = time.AfterFunc(duration, func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if atomic.LoadInt64(&c.fd) != -1 {
+			c.close()
+		}
+	})
+
+	return nil
 }
