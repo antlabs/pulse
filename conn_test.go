@@ -62,14 +62,6 @@ func Test_Listen(t *testing.T) {
 }
 
 func TestConn_SetDeadline(t *testing.T) {
-	// 创建一个测试用的Conn
-	conn := &Conn{
-		fd: 1,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
-	}
-
 	tests := []struct {
 		name    string
 		time    time.Time
@@ -83,7 +75,7 @@ func TestConn_SetDeadline(t *testing.T) {
 		{
 			name:    "set past deadline",
 			time:    time.Now().Add(-time.Second),
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name:    "clear deadline",
@@ -94,9 +86,33 @@ func TestConn_SetDeadline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := conn.SetDeadline(tt.time)
+			// 为每个子测试创建独立的连接
+			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+			if err != nil {
+				t.Fatalf("OpenFile() error = %v", err)
+			}
+			defer fd.Close()
+
+			conn := &Conn{
+				fd: int64(fd.Fd()),
+				safeConns: &safeConns[Conn]{
+					conns: make([]*Conn, 1000),
+				},
+			}
+
+			err = conn.SetDeadline(tt.time)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SetDeadline() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			// 对于过去的时间，连接应该被关闭
+			if tt.time.Before(time.Now()) && !tt.time.IsZero() {
+				// 给一点时间让close操作完成
+				time.Sleep(10 * time.Millisecond)
+				if atomic.LoadInt64(&conn.fd) != -1 {
+					t.Error("Connection should be closed for past deadline")
+				}
+				return
 			}
 
 			// 验证读写定时器都被正确设置
@@ -119,21 +135,26 @@ func TestConn_SetDeadline(t *testing.T) {
 	}
 
 	// 测试连接关闭的情况
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	defer fd.Close()
+
+	conn := &Conn{
+		fd: int64(fd.Fd()),
+		safeConns: &safeConns[Conn]{
+			conns: make([]*Conn, 1000),
+		},
+	}
 	conn.close()
-	err := conn.SetDeadline(time.Now().Add(time.Second))
+	err = conn.SetDeadline(time.Now().Add(time.Second))
 	if err == nil {
 		t.Error("SetDeadline() should return error when connection is closed")
 	}
 }
 
 func TestConn_SetReadDeadline(t *testing.T) {
-	conn := &Conn{
-		fd: 1,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
-	}
-
 	tests := []struct {
 		name    string
 		time    time.Time
@@ -158,9 +179,33 @@ func TestConn_SetReadDeadline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := conn.SetReadDeadline(tt.time)
+			// 为每个子测试创建独立的连接
+			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+			if err != nil {
+				t.Fatalf("OpenFile() error = %v", err)
+			}
+			defer fd.Close()
+
+			conn := &Conn{
+				fd: int64(fd.Fd()),
+				safeConns: &safeConns[Conn]{
+					conns: make([]*Conn, 1000),
+				},
+			}
+
+			err = conn.SetReadDeadline(tt.time)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SetReadDeadline() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			// 对于过去的时间，连接应该被关闭
+			if tt.time.Before(time.Now()) && !tt.time.IsZero() {
+				// 给一点时间让close操作完成
+				time.Sleep(10 * time.Millisecond)
+				if atomic.LoadInt64(&conn.fd) != -1 {
+					t.Error("Connection should be closed for past deadline")
+				}
+				return
 			}
 
 			// 验证读定时器被正确设置
@@ -177,21 +222,26 @@ func TestConn_SetReadDeadline(t *testing.T) {
 	}
 
 	// 测试连接关闭的情况
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	defer fd.Close()
+
+	conn := &Conn{
+		fd: int64(fd.Fd()),
+		safeConns: &safeConns[Conn]{
+			conns: make([]*Conn, 1000),
+		},
+	}
 	conn.close()
-	err := conn.SetReadDeadline(time.Now().Add(time.Second))
+	err = conn.SetReadDeadline(time.Now().Add(time.Second))
 	if err == nil {
 		t.Error("SetReadDeadline() should return error when connection is closed")
 	}
 }
 
 func TestConn_SetWriteDeadline(t *testing.T) {
-	conn := &Conn{
-		fd: 1,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
-	}
-
 	tests := []struct {
 		name    string
 		time    time.Time
@@ -216,9 +266,33 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := conn.SetWriteDeadline(tt.time)
+			// 为每个子测试创建独立的连接
+			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+			if err != nil {
+				t.Fatalf("OpenFile() error = %v", err)
+			}
+			defer fd.Close()
+
+			conn := &Conn{
+				fd: int64(fd.Fd()),
+				safeConns: &safeConns[Conn]{
+					conns: make([]*Conn, 1000),
+				},
+			}
+
+			err = conn.SetWriteDeadline(tt.time)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("SetWriteDeadline() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			// 对于过去的时间，连接应该被关闭
+			if tt.time.Before(time.Now()) && !tt.time.IsZero() {
+				// 给一点时间让close操作完成
+				time.Sleep(10 * time.Millisecond)
+				if atomic.LoadInt64(&conn.fd) != -1 {
+					t.Error("Connection should be closed for past deadline")
+				}
+				return
 			}
 
 			// 验证写定时器被正确设置
@@ -235,8 +309,20 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 	}
 
 	// 测试连接关闭的情况
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	defer fd.Close()
+
+	conn := &Conn{
+		fd: int64(fd.Fd()),
+		safeConns: &safeConns[Conn]{
+			conns: make([]*Conn, 1000),
+		},
+	}
 	conn.close()
-	err := conn.SetWriteDeadline(time.Now().Add(time.Second))
+	err = conn.SetWriteDeadline(time.Now().Add(time.Second))
 	if err == nil {
 		t.Error("SetWriteDeadline() should return error when connection is closed")
 	}
@@ -249,9 +335,8 @@ func TestConn_DeadlineTimeout(t *testing.T) {
 	}
 	defer fd.Close()
 
-	fd2 := fd.Fd()
 	conn := &Conn{
-		fd: int64(fd2),
+		fd: int64(fd.Fd()),
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
@@ -303,24 +388,25 @@ func TestConn_DeadlineReset(t *testing.T) {
 	}
 
 	// 设置初始超时
-	initialTimeout := 1000 * time.Millisecond
+	initialTimeout := 300 * time.Millisecond
 	err = conn.SetDeadline(time.Now().Add(initialTimeout))
 	if err != nil {
 		t.Fatalf("SetDeadline() error = %v", err)
 	}
 
 	// 等待一半时间
-	time.Sleep(initialTimeout / 2)
+	time.Sleep(initialTimeout / 2) // 等待150ms
 
-	// 重置超时时间
-	newTimeout := 200 * time.Millisecond
+	// 重置超时时间为更长的时间
+	newTimeout := 500 * time.Millisecond
 	err = conn.SetDeadline(time.Now().Add(newTimeout))
 	if err != nil {
 		t.Fatalf("Reset SetDeadline() error = %v", err)
 	}
 
 	// 等待超过初始超时时间但小于新超时时间
-	time.Sleep(initialTimeout + 50*time.Millisecond)
+	// 已经等待了150ms，再等待200ms，总共350ms，超过初始300ms但小于新的500ms
+	time.Sleep(200 * time.Millisecond)
 
 	// 验证连接仍然存活
 	if atomic.LoadInt64(&conn.fd) == -1 {
