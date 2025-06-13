@@ -185,8 +185,10 @@ func (e *MultiEventLoop[T]) doRead(c *Conn, rbuf []byte) {
 			handleData(c, &e.options, rbuf[:n])
 		}
 
-		if n < len(rbuf) {
-			break
+		if e.options.triggerType == core.TriggerTypeLevel {
+			if n < len(rbuf) {
+				break
+			}
 		}
 	}
 }
