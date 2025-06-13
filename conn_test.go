@@ -2,6 +2,7 @@ package pulse
 
 import (
 	"net"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ func Test_OnData(t *testing.T) {
 		),
 	}
 
+	options.taskType = TaskTypeInEventLoop
 	testData := []byte("hello")
 	handleData[[]byte](c, options, testData)
 
@@ -241,8 +243,15 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 }
 
 func TestConn_DeadlineTimeout(t *testing.T) {
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	defer fd.Close()
+
+	fd2 := fd.Fd()
 	conn := &Conn{
-		fd: 1,
+		fd: int64(fd2),
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
@@ -250,7 +259,7 @@ func TestConn_DeadlineTimeout(t *testing.T) {
 
 	// 设置一个很短的超时时间
 	timeout := 100 * time.Millisecond
-	err := conn.SetDeadline(time.Now().Add(timeout))
+	err = conn.SetDeadline(time.Now().Add(timeout))
 	if err != nil {
 		t.Fatalf("SetDeadline() error = %v", err)
 	}
@@ -279,16 +288,23 @@ func TestConn_DeadlineTimeout(t *testing.T) {
 }
 
 func TestConn_DeadlineReset(t *testing.T) {
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	defer fd.Close()
+
+	fd2 := fd.Fd()
 	conn := &Conn{
-		fd: 1,
+		fd: int64(fd2),
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
 	}
 
 	// 设置初始超时
-	initialTimeout := 200 * time.Millisecond
-	err := conn.SetDeadline(time.Now().Add(initialTimeout))
+	initialTimeout := 1000 * time.Millisecond
+	err = conn.SetDeadline(time.Now().Add(initialTimeout))
 	if err != nil {
 		t.Fatalf("SetDeadline() error = %v", err)
 	}

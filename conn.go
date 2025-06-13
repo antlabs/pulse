@@ -249,23 +249,26 @@ func (c *Conn) needFlush() bool {
 
 func (c *Conn) SetDeadline(t time.Time) error {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if atomic.LoadInt64(&c.fd) == -1 {
-		c.mu.Unlock()
 		return net.ErrClosed
 	}
-	c.mu.Unlock()
 
 	// Set both read and write deadlines
-	if err := c.SetReadDeadline(t); err != nil {
+	if err := c.setReadDeadlineCore(t); err != nil {
 		return err
 	}
-	return c.SetWriteDeadline(t)
+	return c.setWriteDeadlineCore(t)
 }
 
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.setReadDeadlineCore(t)
+}
+
+func (c *Conn) setReadDeadlineCore(t time.Time) error {
 
 	if atomic.LoadInt64(&c.fd) == -1 {
 		return net.ErrClosed
@@ -303,6 +306,10 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.setWriteDeadlineCore(t)
+}
+
+func (c *Conn) setWriteDeadlineCore(t time.Time) error {
 
 	if atomic.LoadInt64(&c.fd) == -1 {
 		return net.ErrClosed
