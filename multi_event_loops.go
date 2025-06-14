@@ -137,6 +137,7 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 							return
 						}
 						if c != nil {
+							e.options.callback.OnClose(c, err)
 							c.Close()
 						}
 						return
@@ -178,6 +179,7 @@ func (e *MultiEventLoop) doRead(c *Conn, rbuf []byte) {
 			}
 
 			// 如果不是这个错误直接关闭连接
+			e.options.callback.OnClose(c, err)
 			c.Close()
 			return
 		}

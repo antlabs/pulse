@@ -88,11 +88,7 @@ func EncodeTLV(msgType uint16, data []byte) []byte {
 // TLVCallback 处理TLV消息的回调
 type TLVCallback struct{}
 
-func (cb *TLVCallback) OnOpen(c *pulse.Conn, err error) {
-	if err != nil {
-		slog.Error("Connection failed", "error", err)
-		return
-	}
+func (cb *TLVCallback) OnOpen(c *pulse.Conn) {
 
 	// 为每个连接初始化空的buffer
 	c.SetSession(make([]byte, 0))
