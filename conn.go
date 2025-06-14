@@ -2,6 +2,7 @@ package pulse
 
 import (
 	"errors"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -33,13 +34,14 @@ func (c *Conn) getFd() int {
 }
 func newConn(fd int, safeConns *safeConns[Conn], task selectTasks, taskType TaskType, eventLoop core.PollingApi) *Conn {
 	var taskExecutor driver.TaskExecutor
-	if taskType == TaskTypeInConnectionGoroutine {
+	switch taskType {
+	case TaskTypeInConnectionGoroutine:
 		taskExecutor = task.newTask("stream")
-	} else if taskType == TaskTypeInEventLoop {
+	case TaskTypeInEventLoop:
 		// 不做任何事情
-	} else if taskType == TaskTypeInBusinessGoroutine {
+	case TaskTypeInBusinessGoroutine:
 		taskExecutor = task.newTask("stream2")
-	} else {
+	default:
 		panic("invalid task type")
 	}
 
@@ -75,7 +77,10 @@ func (c *Conn) close() {
 	oldFd := atomic.SwapInt64(&c.fd, -1)
 	if oldFd != -1 {
 		c.safeConns.Del(int(oldFd))
-		core.Close(int(oldFd))
+		if err := core.Close(int(oldFd)); err != nil {
+			// Log the error but don't panic as this is a cleanup function
+			log.Printf("failed to close fd %d: %v", oldFd, err)
+		}
 	}
 	for _, wbuf := range c.wbufList {
 		putBytes(wbuf)
@@ -128,7 +133,9 @@ func (c *Conn) Write(data []byte) (int, error) {
 				newBuf := getBytes(len(data) - n)
 				copy(*newBuf, data[n:])
 				c.wbufList = append(c.wbufList, newBuf)
-				c.eventLoop.AddWrite(c.getFd())
+				if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
+					log.Printf("failed to add write event: %v", err)
+				}
 			}
 			return n, nil
 		}
@@ -177,12 +184,16 @@ func (c *Conn) Write(data []byte) (int, error) {
 
 	// 所有数据都已写入
 	c.wbufList = c.wbufList[:0]
-	c.eventLoop.ResetRead(c.getFd())
+	if err := c.eventLoop.ResetRead(c.getFd()); err != nil {
+		log.Printf("failed to reset read event: %v", err)
+	}
 	return len(data), nil
 }
 
 func (c *Conn) flush() {
-	c.Write(nil)
+	if _, err := c.Write(nil); err != nil {
+		log.Printf("failed to flush write buffer: %v", err)
+	}
 }
 
 func (c *Conn) SetSession(session any) {
@@ -209,7 +220,7 @@ func handleData(c *Conn, options *Options, rawData []byte) {
 	*newBytes = (*newBytes)[:len(rawData)]
 
 	// 进入协程池
-	c.task.AddTask(&c.mu, func() bool {
+	if err := c.task.AddTask(&c.mu, func() bool {
 		options.callback.OnData(c, *newBytes)
 		// 释放newBytes
 		if newBytes != nil {
@@ -217,7 +228,13 @@ func handleData(c *Conn, options *Options, rawData []byte) {
 			newBytes = nil
 		}
 		return true
-	})
+	}); err != nil {
+		log.Printf("failed to add task: %v", err)
+		// 释放newBytes since task failed
+		if newBytes != nil {
+			putBytes(newBytes)
+		}
+	}
 }
 
 func (c *Conn) needFlush() bool {

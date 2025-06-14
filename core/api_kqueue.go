@@ -20,6 +20,7 @@ package core
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -129,7 +130,10 @@ func (as *eventPollState) Poll(tv time.Duration, cb func(int, State, error)) (re
 
 func (as *eventPollState) Free() {
 	if as != nil {
-		unix.Close(as.kqfd)
+		if err := unix.Close(as.kqfd); err != nil {
+			// Log the error but don't panic as this is a cleanup function
+			slog.Warn("failed to close kqueue fd", "error", err)
+		}
 		as.kqfd = -1
 	}
 }

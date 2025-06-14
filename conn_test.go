@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const testSessionData = "test_session"
+
 func Test_OnData(t *testing.T) {
 	c := &Conn{fd: 0}
 	var receivedData []byte
@@ -49,14 +51,20 @@ func Test_Listen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First Listen() failed: %v", err)
 	}
-	defer listener1.Close()
+	defer func() {
+		if err := listener1.Close(); err != nil {
+			t.Logf("failed to close listener1: %v", err)
+		}
+	}()
 
 	// 第二次监听应该失败，因为端口已被占用
 	listener2, err := net.Listen("tcp", "127.0.0.1:8080")
 	if err == nil {
 		t.Error("Second Listen() should fail, but succeeded")
 		if listener2 != nil {
-			listener2.Close()
+			if err := listener2.Close(); err != nil {
+				t.Logf("failed to close listener2: %v", err)
+			}
 		}
 	}
 }
@@ -87,11 +95,15 @@ func TestConn_SetDeadline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 为每个子测试创建独立的连接
-			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 			if err != nil {
 				t.Fatalf("OpenFile() error = %v", err)
 			}
-			defer fd.Close()
+			defer func() {
+				if err := fd.Close(); err != nil {
+					t.Logf("failed to close fd: %v", err)
+				}
+			}()
 
 			conn := &Conn{
 				fd: int64(fd.Fd()),
@@ -129,11 +141,15 @@ func TestConn_SetDeadline(t *testing.T) {
 	}
 
 	// 测试连接关闭的情况
-	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
 	}
-	defer fd.Close()
+	defer func() {
+		if err := fd.Close(); err != nil {
+			t.Logf("failed to close fd: %v", err)
+		}
+	}()
 
 	conn := &Conn{
 		fd: int64(fd.Fd()),
@@ -174,11 +190,15 @@ func TestConn_SetReadDeadline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 为每个子测试创建独立的连接
-			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 			if err != nil {
 				t.Fatalf("OpenFile() error = %v", err)
 			}
-			defer fd.Close()
+			defer func() {
+				if err := fd.Close(); err != nil {
+					t.Logf("failed to close fd: %v", err)
+				}
+			}()
 
 			conn := &Conn{
 				fd: int64(fd.Fd()),
@@ -216,11 +236,15 @@ func TestConn_SetReadDeadline(t *testing.T) {
 	}
 
 	// 测试连接关闭的情况
-	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
 	}
-	defer fd.Close()
+	defer func() {
+		if err := fd.Close(); err != nil {
+			t.Logf("failed to close fd: %v", err)
+		}
+	}()
 
 	conn := &Conn{
 		fd: int64(fd.Fd()),
@@ -261,11 +285,15 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 为每个子测试创建独立的连接
-			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 			if err != nil {
 				t.Fatalf("OpenFile() error = %v", err)
 			}
-			defer fd.Close()
+			defer func() {
+				if err := fd.Close(); err != nil {
+					t.Logf("failed to close fd: %v", err)
+				}
+			}()
 
 			conn := &Conn{
 				fd: int64(fd.Fd()),
@@ -303,11 +331,15 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 	}
 
 	// 测试连接关闭的情况
-	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
 	}
-	defer fd.Close()
+	defer func() {
+		if err := fd.Close(); err != nil {
+			t.Logf("failed to close fd: %v", err)
+		}
+	}()
 
 	conn := &Conn{
 		fd: int64(fd.Fd()),
@@ -323,11 +355,15 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 }
 
 func TestConn_DeadlineTimeout(t *testing.T) {
-	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
 	}
-	defer fd.Close()
+	defer func() {
+		if err := fd.Close(); err != nil {
+			t.Logf("failed to close fd: %v", err)
+		}
+	}()
 
 	conn := &Conn{
 		fd: int64(fd.Fd()),
@@ -367,11 +403,15 @@ func TestConn_DeadlineTimeout(t *testing.T) {
 }
 
 func TestConn_DeadlineReset(t *testing.T) {
-	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
 	}
-	defer fd.Close()
+	defer func() {
+		if err := fd.Close(); err != nil {
+			t.Logf("failed to close fd: %v", err)
+		}
+	}()
 
 	fd2 := fd.Fd()
 	conn := &Conn{
@@ -446,7 +486,7 @@ func TestCallback_OnOpen(t *testing.T) {
 			name:        "successful connection open",
 			expectError: false,
 			setup: func() *Conn {
-				fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+				fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 				if err != nil {
 					t.Fatalf("OpenFile() error = %v", err)
 				}
@@ -462,7 +502,7 @@ func TestCallback_OnOpen(t *testing.T) {
 			name:        "connection with session data",
 			expectError: false,
 			setup: func() *Conn {
-				fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+				fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 				if err != nil {
 					t.Fatalf("OpenFile() error = %v", err)
 				}
@@ -568,7 +608,7 @@ func TestCallback_OnClose(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+			fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 			if err != nil {
 				t.Fatalf("OpenFile() error = %v", err)
 			}
@@ -639,7 +679,7 @@ func TestCallback_OnClose(t *testing.T) {
 
 // TestConn_CloseCleanup 测试连接关闭时的清理工作
 func TestConn_CloseCleanup(t *testing.T) {
-	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
 	}
@@ -652,7 +692,7 @@ func TestConn_CloseCleanup(t *testing.T) {
 	}
 
 	// 设置一些状态用于测试清理
-	conn.SetSession("test_session")
+	conn.SetSession(testSessionData)
 
 	// 设置定时器
 	_ = conn.SetDeadline(time.Now().Add(time.Hour))
@@ -664,7 +704,7 @@ func TestConn_CloseCleanup(t *testing.T) {
 	conn.wbufList = append(conn.wbufList, buf)
 
 	// 验证设置成功
-	if conn.GetSession() != "test_session" {
+	if conn.GetSession() != testSessionData {
 		t.Error("Session should be set")
 	}
 	if conn.readTimer == nil || conn.writeTimer == nil {
@@ -715,14 +755,14 @@ func TestConn_CloseCleanup(t *testing.T) {
 	}
 
 	// 验证Session仍然可以访问（Session不会被清理，由用户决定）
-	if conn.GetSession() != "test_session" {
+	if conn.GetSession() != testSessionData {
 		t.Error("Session should still be accessible after close")
 	}
 }
 
 // TestConn_CloseWithTimeout 测试超时关闭的OnClose回调
 func TestConn_CloseWithTimeout(t *testing.T) {
-	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
 	}
@@ -810,11 +850,15 @@ func TestCallback_ToCallback(t *testing.T) {
 	)
 
 	// 创建测试连接
-	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0666)
+	fd, err := os.OpenFile("/dev/null", os.O_RDONLY, 0600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
 	}
-	defer fd.Close()
+	defer func() {
+		if err := fd.Close(); err != nil {
+			t.Logf("failed to close fd: %v", err)
+		}
+	}()
 
 	conn := &Conn{
 		fd: int64(fd.Fd()),

@@ -1,5 +1,5 @@
 # Makefile for building pulse examples for macOS, Linux and Windows
-.PHONY: all clean mac linux windows examples mac-race linux-race windows-race test test-coverage ci-test lint
+.PHONY: all clean mac linux windows examples mac-race linux-race windows-race test test-coverage ci-test lint lint-fix
 
 # Default target
 all: examples
@@ -21,7 +21,11 @@ ci-test:
 
 lint:
 	@echo "Running linter..."
-	golangci-lint run --timeout=5m --skip-dirs=example --skip-dirs=cpu
+	golangci-lint run --timeout=5m . core task/...
+
+lint-fix:
+	@echo "Running linter with auto-fix..."
+	golangci-lint run --timeout=5m . core task/... --fix
 
 # Directories
 EXAMPLE_DIR = example

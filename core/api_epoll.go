@@ -86,7 +86,10 @@ func Create(triggerType TriggerType) (la PollingApi, err error) {
 
 // 释放
 func (e *eventPollState) Free() {
-	syscall.Close(e.epfd)
+	if err := syscall.Close(e.epfd); err != nil {
+		// Log the error but don't panic as this is a cleanup function
+		slog.Warn("failed to close epoll fd", "error", err)
+	}
 }
 
 // 新加读事件

@@ -3,6 +3,7 @@ package pulse
 import (
 	"context"
 	"errors"
+	"log"
 	"log/slog"
 	"net"
 	"os"
@@ -20,7 +21,6 @@ type MultiEventLoop struct {
 	eventLoops []core.PollingApi
 	options    Options
 	localTask  selectTasks
-	ctx        context.Context
 }
 
 func (m *MultiEventLoop) initDefaultSetting() {
@@ -103,7 +103,9 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 				slog.Error("getFdFromConn", "err", err)
 				continue
 			}
-			c.Close()
+			if err := c.Close(); err != nil {
+				log.Printf("failed to close connection: %v", err)
+			}
 
 			// 轮询分配到eventLoop
 			index := i % len(e.eventLoops)
@@ -128,7 +130,7 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 
 			rbuf := make([]byte, e.options.eventLoopReadBufferSize)
 			for {
-				eventLoop.Poll(0, func(fd int, state core.State, err error) {
+				if _, err := eventLoop.Poll(0, func(fd int, state core.State, err error) {
 
 					c := safeConns.GetUnsafe(fd)
 					// slog.Debug("poll", "fd", fd, "state", state, "err", err)
@@ -154,7 +156,9 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 						e.doRead(c, rbuf)
 					}
 
-				})
+				}); err != nil {
+					log.Printf("eventLoop.Poll error: %v", err)
+				}
 
 			}
 		}()

@@ -23,6 +23,7 @@ func TestSafeConns_AddAndGet(t *testing.T) {
 	got := safeConns.Get(fd)
 	if got == nil {
 		t.Errorf("Get(%d) = nil, want %v", fd, conn)
+		return
 	}
 	if got.id != conn.id {
 		t.Errorf("Get(%d).id = %d, want %d", fd, got.id, conn.id)
@@ -62,6 +63,8 @@ func TestSafeConns_Concurrent(t *testing.T) {
 				got := safeConns.Get(fd)
 				if got == nil {
 					t.Errorf("Get(%d) = nil, want %v", fd, conn)
+					done <- true
+					return
 				}
 				if got.id != conn.id {
 					t.Errorf("Get(%d).id = %d, want %d", fd, got.id, conn.id)

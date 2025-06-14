@@ -2,17 +2,14 @@ package pulse
 
 import (
 	"log/slog"
-	"runtime"
 
 	"github.com/antlabs/pulse/core"
 )
 
 var (
-	defMaxEventNum             = 256
 	defTaskMin                 = 50
 	defTaskMax                 = 30000
 	defTaskInitCount           = 8
-	defNumLoops                = runtime.NumCPU()
 	defEventLoopReadBufferSize = 1024 * 4
 )
 
