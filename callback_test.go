@@ -354,17 +354,20 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 	defer listener.Close()
 
 	addr := listener.Addr().String()
-	var pulseConn *Conn
-	var serverErr error
 	var wg sync.WaitGroup
 
-	// 启动服务器
+	// Use channels to synchronize between goroutines
+	pulseConnChan := make(chan *Conn, 1)
+	serverErrChan := make(chan error, 1)
+
+	// 启动服务器（异步等待连接）
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+
 		conn, err := listener.Accept()
 		if err != nil {
-			serverErr = err
+			serverErrChan <- fmt.Errorf("accept failed: %v", err)
 			return
 		}
 		defer conn.Close()
@@ -372,7 +375,7 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 		// 获取文件描述符并创建Pulse连接
 		fd, err := core.GetFdFromConn(conn)
 		if err != nil {
-			serverErr = err
+			serverErrChan <- fmt.Errorf("get fd failed: %v", err)
 			return
 		}
 		conn.Close()
@@ -380,7 +383,7 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 		safeConns := &safeConns[Conn]{}
 		safeConns.init(1000)
 
-		pulseConn = &Conn{
+		pulseConn := &Conn{
 			fd:        int64(fd),
 			safeConns: safeConns,
 		}
@@ -389,12 +392,15 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 		// 调用OnOpen
 		callback.OnOpen(pulseConn)
 
-		// 等待客户端连接
-		time.Sleep(10 * time.Millisecond)
+		// Send successful result
+		pulseConnChan <- pulseConn
+
+		// Keep the connection alive for the test
+		time.Sleep(100 * time.Millisecond)
 	}()
 
-	// 等待服务器启动
-	time.Sleep(20 * time.Millisecond)
+	// Give server a moment to start listening
+	time.Sleep(10 * time.Millisecond)
 
 	// 创建客户端连接
 	clientConn, err := net.Dial("tcp", addr)
@@ -403,8 +409,16 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 	}
 	defer clientConn.Close()
 
-	// 等待服务器处理OnOpen
-	time.Sleep(30 * time.Millisecond)
+	// Wait for server to process the connection and send pulseConn
+	var pulseConn *Conn
+	select {
+	case pulseConn = <-pulseConnChan:
+		// Success, continue with test
+	case serverErr := <-serverErrChan:
+		return serverErr
+	case <-time.After(2 * time.Second):
+		return fmt.Errorf("timeout waiting for server to process connection")
+	}
 
 	// 执行测试场景
 	wg.Add(1)
@@ -421,7 +435,7 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 	}()
 
 	wg.Wait()
-	return serverErr
+	return nil
 }
 
 // TestCallback_RealConnectionLifecycle 测试真实连接的完整生命周期
