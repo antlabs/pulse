@@ -161,8 +161,8 @@ func main() {
 	// 启动多事件循环服务器
 	server, err := pulse.NewMultiEventLoop(
 		context.Background(),
-		pulse.WithCallback[[]byte](callback),
-		pulse.WithTaskType[[]byte](pulse.TaskTypeInEventLoop),
+		pulse.WithCallback(callback),
+		pulse.WithTaskType(pulse.TaskTypeInEventLoop),
 	)
 
 	if err != nil {

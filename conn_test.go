@@ -14,8 +14,8 @@ func Test_OnData(t *testing.T) {
 	var receivedErr error
 	var closeErr error
 
-	options := &Options[[]byte]{
-		callback: ToCallback[[]byte](
+	options := &Options{
+		callback: ToCallback(
 			func(c *Conn, err error) {
 				receivedErr = err
 			},
@@ -30,7 +30,7 @@ func Test_OnData(t *testing.T) {
 
 	options.taskType = TaskTypeInEventLoop
 	testData := []byte("hello")
-	handleData[[]byte](c, options, testData)
+	handleData(c, options, testData)
 
 	if string(receivedData) != string(testData) {
 		t.Errorf("OnData callback received wrong data, got %v, want %v", receivedData, testData)
