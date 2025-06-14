@@ -37,7 +37,7 @@ import (
 
 type EchoHandler struct{}
 
-func (h *EchoHandler) OnOpen(c *pulse.Conn, err error) {
+func (h *EchoHandler) OnOpen(c *pulse.Conn) {
     if err != nil {
         log.Printf("连接失败: %v", err)
         return
@@ -83,7 +83,7 @@ import (
 
 type ProtocolHandler struct{}
 
-func (h *ProtocolHandler) OnOpen(c *pulse.Conn, err error) {
+func (h *ProtocolHandler) OnOpen(c *pulse.Conn) {
     if err != nil {
         return
     }
@@ -143,7 +143,7 @@ func main() {
 
 ```go
 type Callback[T any] interface {
-    OnOpen(c *Conn, err error)  // 连接建立时调用
+    OnOpen(c *Conn)  // 连接建立时调用
     OnData(c *Conn, data T)     // 接收到数据时调用  
     OnClose(c *Conn, err error) // 连接关闭时调用
 }
@@ -217,7 +217,7 @@ wrk -t12 -c400 -d30s --script=lua/echo.lua http://127.0.0.1:8080
 
 1. **状态管理**：使用 `SetSession/GetSession` 存储连接级别的状态
 2. **协议解析**：推荐使用无状态解析函数，避免全局共享状态
-3. **错误处理**：在OnOpen和OnClose中正确处理错误
+3. **错误处理**：在OnClose中正确处理错误
 4. **内存管理**：及时释放大的临时缓冲区，使用连接池复用连接
 5. **并发安全**：避免在多个goroutine中同时操作同一个连接
 
