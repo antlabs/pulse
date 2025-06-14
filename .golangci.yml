@@ -37,7 +37,13 @@ linters-settings:
   misspell:
     locale: US
   revive:
-    min-confidence: 8
+    confidence: 0.8
+    enable-all-rules: false
+    rules:
+      - name: exported
+        arguments:
+          - checkPrivateReceivers
+          - sayRepetitiveInsteadOfStutters
 
 issues:
   exclude-use-default: false
