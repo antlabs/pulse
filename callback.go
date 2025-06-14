@@ -7,7 +7,7 @@ type OnData func(c *Conn, data []byte)
 type OnClose func(c *Conn, err error)
 
 type Callback interface {
-	OnOpen(c *Conn, err error)
+	OnOpen(c *Conn)
 	OnData(c *Conn, data []byte)
 	OnClose(c *Conn, err error)
 }
@@ -18,8 +18,8 @@ type toCallback struct {
 	onClose OnClose
 }
 
-func (t *toCallback) OnOpen(c *Conn, err error) {
-	t.onOpen(c, err)
+func (t *toCallback) OnOpen(c *Conn) {
+	t.onOpen(c, nil)
 }
 
 func (t *toCallback) OnData(c *Conn, data []byte) {

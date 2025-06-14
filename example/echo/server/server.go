@@ -15,11 +15,7 @@ import (
 // 必须是空结构体
 type handler struct{}
 
-func (h *handler) OnOpen(c *pulse.Conn, err error) {
-	if err != nil {
-		fmt.Println("OnOpen error:", err)
-		return
-	}
+func (h *handler) OnOpen(c *pulse.Conn) {
 	fmt.Println("OnOpen success")
 }
 
