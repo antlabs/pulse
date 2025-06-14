@@ -93,10 +93,10 @@ func main() {
 	el, err := pulse.NewMultiEventLoop(
 		context.Background(),
 		pulse.WithCallback(&handler{}),
-		pulse.WithLogLevel[[]byte](slog.LevelError),
-		pulse.WithTaskType[[]byte](pulse.TaskTypeInEventLoop),
-		pulse.WithTriggerType[[]byte](pulse.TriggerTypeEdge),
-		pulse.WithEventLoopReadBufferSize[[]byte](1024*4))
+		pulse.WithLogLevel(slog.LevelError),
+		pulse.WithTaskType(pulse.TaskTypeInEventLoop),
+		pulse.WithTriggerType(pulse.TriggerTypeEdge),
+		pulse.WithEventLoopReadBufferSize(1024*4))
 
 	if err != nil {
 		panic(err.Error())

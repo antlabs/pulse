@@ -40,9 +40,8 @@ type taskConfig struct {
 }
 
 // 边缘触发
-type Options[T any] struct {
-	callback                Callback[T]
-	decoder                 Decoder[T]
+type Options struct {
+	callback                Callback
 	task                    taskConfig
 	level                   slog.Level
 	taskType                TaskType
@@ -51,44 +50,36 @@ type Options[T any] struct {
 }
 
 // 设置回调函数
-func WithCallback[T any](callback Callback[T]) func(*Options[T]) {
-	return func(o *Options[T]) {
+func WithCallback(callback Callback) func(*Options) {
+	return func(o *Options) {
 		o.callback = callback
 	}
 }
 
-// 设置解码器
-func WithDecoder[T any](decoder Decoder[T]) func(*Options[T]) {
-
-	return func(o *Options[T]) {
-		o.decoder = decoder
-	}
-}
-
 // 设置日志级别
-func WithLogLevel[T any](level slog.Level) func(*Options[T]) {
-	return func(o *Options[T]) {
+func WithLogLevel(level slog.Level) func(*Options) {
+	return func(o *Options) {
 		o.level = level
 	}
 }
 
 // 选择task的类型
-func WithTaskType[T any](taskType TaskType) func(*Options[T]) {
-	return func(o *Options[T]) {
+func WithTaskType(taskType TaskType) func(*Options) {
+	return func(o *Options) {
 		o.taskType = taskType
 	}
 }
 
 // 设置水平触发还是边缘触发
-func WithTriggerType[T any](triggerType core.TriggerType) func(*Options[T]) {
-	return func(o *Options[T]) {
+func WithTriggerType(triggerType core.TriggerType) func(*Options) {
+	return func(o *Options) {
 		o.triggerType = triggerType
 	}
 }
 
 // 设置event loop里面读buffer的大小
-func WithEventLoopReadBufferSize[T any](size int) func(*Options[T]) {
-	return func(o *Options[T]) {
+func WithEventLoopReadBufferSize(size int) func(*Options) {
+	return func(o *Options) {
 		o.eventLoopReadBufferSize = size
 	}
 }

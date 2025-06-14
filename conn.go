@@ -2,8 +2,6 @@ package pulse
 
 import (
 	"errors"
-	"fmt"
-	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -23,6 +21,7 @@ type Conn struct {
 	eventLoop  core.PollingApi
 	readTimer  *time.Timer
 	writeTimer *time.Timer
+	session    any // 会话数据
 }
 
 func (c *Conn) SetNoDelay(nodelay bool) error {
@@ -186,52 +185,32 @@ func (c *Conn) flush() {
 	c.Write(nil)
 }
 
+func (c *Conn) SetSession(session any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.session = session
+}
+
+func (c *Conn) GetSession() any {
+	return c.session
+}
+
 // handleData 处理数据的逻辑
-func handleData[T any](c *Conn, options *Options[T], rawData []byte) {
+func handleData(c *Conn, options *Options, rawData []byte) {
 
 	if options.taskType == TaskTypeInEventLoop {
-		if options.decoder == nil {
-			// 快速路径，直接调用回调函数
-			options.callback.OnData(c, any(rawData).(T))
-			return
-		}
-		decodedData, _, err := options.decoder.Decode(rawData)
-		if err == nil {
-			options.callback.OnData(c, decodedData)
-		} else {
-			slog.Error("decode error", "err", err)
-		}
+		options.callback.OnData(c, rawData)
 		return
 	}
 
-	var data T
-
 	var newBytes *[]byte
-	// 如果配置了解码器，则尝试解码
-	if options.decoder != nil {
-		decodedData, _, err := options.decoder.Decode(rawData)
-		if err == nil {
-			data = decodedData // 使用解码后的数据
-		} else {
-			fmt.Println("Decode error:", err)
-			return
-		}
-	} else {
-		// 如果没有解码器，直接将原始数据转换为目标类型
-		_, ok := any(rawData).(T)
-		if !ok {
-			fmt.Println("Type assertion failed for raw data")
-			return
-		}
-		newBytes = getBytes(len(rawData))
-		copy(*newBytes, rawData)
-		*newBytes = (*newBytes)[:len(rawData)]
-		data = any(*newBytes).(T)
-	}
+	newBytes = getBytes(len(rawData))
+	copy(*newBytes, rawData)
+	*newBytes = (*newBytes)[:len(rawData)]
 
 	// 进入协程池
 	c.task.AddTask(&c.mu, func() bool {
-		options.callback.OnData(c, data)
+		options.callback.OnData(c, *newBytes)
 		// 释放newBytes
 		if newBytes != nil {
 			putBytes(newBytes)

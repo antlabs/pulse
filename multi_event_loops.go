@@ -16,14 +16,14 @@ import (
 	_ "github.com/antlabs/pulse/task/stream2"
 )
 
-type MultiEventLoop[T any] struct {
+type MultiEventLoop struct {
 	eventLoops []core.PollingApi
-	options    Options[T]
+	options    Options
 	localTask  selectTasks
 	ctx        context.Context
 }
 
-func (m *MultiEventLoop[T]) initDefaultSetting() {
+func (m *MultiEventLoop) initDefaultSetting() {
 
 	if m.options.level == 0 {
 		m.options.level = slog.LevelError //
@@ -45,12 +45,12 @@ func (m *MultiEventLoop[T]) initDefaultSetting() {
 	}
 }
 
-func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T])) (e *MultiEventLoop[T], err error) {
+func NewMultiEventLoop(ctx context.Context, options ...func(*Options)) (e *MultiEventLoop, err error) {
 	eventLoops := make([]core.PollingApi, runtime.NumCPU())
 
 	var c driver.Conf
 	c.Log = slog.Default()
-	e = &MultiEventLoop[T]{
+	e = &MultiEventLoop{
 		eventLoops: eventLoops,
 	}
 
@@ -71,7 +71,7 @@ func NewMultiEventLoop[T any](ctx context.Context, options ...func(*Options[T]))
 	return e, nil
 }
 
-func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
+func (e *MultiEventLoop) ListenAndServe(addr string) error {
 	slog.Debug("listenAndServe", "addr", addr)
 	var safeConns safeConns[Conn]
 	safeConns.init(core.GetMaxFd())
@@ -160,7 +160,7 @@ func (e *MultiEventLoop[T]) ListenAndServe(addr string) error {
 	return nil
 }
 
-func (e *MultiEventLoop[T]) doRead(c *Conn, rbuf []byte) {
+func (e *MultiEventLoop) doRead(c *Conn, rbuf []byte) {
 	for {
 		// 循环读取数据
 		c.mu.Lock()
@@ -196,7 +196,7 @@ func (e *MultiEventLoop[T]) doRead(c *Conn, rbuf []byte) {
 	}
 }
 
-func (e *MultiEventLoop[T]) Free() {
+func (e *MultiEventLoop) Free() {
 	for _, eventLoop := range e.eventLoops {
 		eventLoop.Free()
 	}
