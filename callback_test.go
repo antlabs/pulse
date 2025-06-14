@@ -192,7 +192,7 @@ func TestOnOpen_RealSocket(t *testing.T) {
 			// 等待处理
 			time.Sleep(tt.clientDelay)
 			if err := clientConn.Close(); err != nil {
-				t.Logf("failed to close client connection: %v", err)
+				log.Printf("failed to close client connection: %v", err)
 			}
 
 			// 等待服务器处理完成
