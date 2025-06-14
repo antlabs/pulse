@@ -1,4 +1,11 @@
 # pulse
+
+[![CI](https://github.com/antlabs/pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/antlabs/pulse/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/antlabs/pulse/branch/master/graph/badge.svg)](https://codecov.io/gh/antlabs/pulse)
+[![Go Report Card](https://goreportcard.com/badge/github.com/antlabs/pulse)](https://goreportcard.com/report/github.com/antlabs/pulse)
+[![Go Reference](https://pkg.go.dev/badge/github.com/antlabs/pulse.svg)](https://pkg.go.dev/github.com/antlabs/pulse)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 极简异步io库，速度很快，非常简单
 
 ## 特性

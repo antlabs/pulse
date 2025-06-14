@@ -1,8 +1,27 @@
 # Makefile for building pulse examples for macOS, Linux and Windows
-.PHONY: all clean mac linux windows examples mac-race linux-race windows-race
+.PHONY: all clean mac linux windows examples mac-race linux-race windows-race test test-coverage ci-test lint
 
 # Default target
 all: examples
+
+# Test and CI targets
+test:
+	@echo "Running tests..."
+	go test -v -race ./...
+
+test-coverage:
+	@echo "Running tests with coverage..."
+	go test -race -coverprofile=coverage.out -covermode=atomic . ./core/...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+ci-test:
+	@echo "Running CI tests..."
+	go test -race -coverprofile=coverage.out -covermode=atomic . ./core/...
+
+lint:
+	@echo "Running linter..."
+	golangci-lint run --timeout=5m --skip-dirs=example --skip-dirs=cpu
 
 # Directories
 EXAMPLE_DIR = example

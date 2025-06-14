@@ -1,0 +1,47 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - gofmt
+    - golint
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - structcheck
+    - varcheck
+    - ineffassign
+    - deadcode
+    - typecheck
+    - gosec
+    - gocyclo
+    - dupl
+    - misspell
+    - unparam
+    - unconvert
+    - goconst
+    - gocognit
+    - asciicheck
+    - gofumpt
+    - goimports
+    - revive
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  misspell:
+    locale: US
+  revive:
+    min-confidence: 8
+
+issues:
+  exclude-use-default: false
+  exclude:
+    # for "revive" linter
+    - "should have comment"
+    - "comment on exported" 
