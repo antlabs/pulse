@@ -181,6 +181,9 @@ func (e *MultiEventLoop[T]) doRead(c *Conn, rbuf []byte) {
 			return
 		}
 
+		if n == 0 {
+			return
+		}
 		if n > 0 {
 			handleData(c, &e.options, rbuf[:n])
 		}
