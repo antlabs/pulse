@@ -1,5 +1,5 @@
 # Makefile for building pulse examples for macOS, Linux and Windows
-.PHONY: all clean mac linux windows examples mac-race linux-race windows-race test test-coverage ci-test lint lint-fix
+.PHONY: all clean mac linux windows examples mac-race linux-race windows-race test test-race test-coverage test-race-coverage ci-test lint lint-fix
 
 # Default target
 all: examples
@@ -7,13 +7,23 @@ all: examples
 # Test and CI targets
 test:
 	@echo "Running tests..."
+	go test -v ./...
+
+test-race:
+	@echo "Running tests with race detection..."
 	go test -v -race ./...
 
 test-coverage:
 	@echo "Running tests with coverage..."
-	go test -race -coverprofile=coverage.out -covermode=atomic . ./core/...
+	go test -coverprofile=coverage.out -covermode=atomic . ./core/...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
+
+test-race-coverage:
+	@echo "Running tests with race detection and coverage..."
+	go test -race -coverprofile=coverage.out -covermode=atomic . ./core/...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report with race detection generated: coverage.html"
 
 ci-test:
 	@echo "Running CI tests..."

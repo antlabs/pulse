@@ -3,6 +3,7 @@ package pulse
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -36,27 +37,28 @@ func TestOnOpen_RealSocket(t *testing.T) {
 				}
 
 				addr := listener.Addr().String()
+				var wg sync.WaitGroup
 
-				// 启动服务器
+				wg.Add(1)
 				go func() {
+					defer wg.Done()
 					conn, err := listener.Accept()
 					if err != nil {
 						return
 					}
 					defer func() {
 						if err := conn.Close(); err != nil {
-							t.Logf("failed to close connection: %v", err)
+							log.Printf("failed to close connection: %v", err)
 						}
 					}()
 
-					// 获取文件描述符
 					fd, err := core.GetFdFromConn(conn)
 					if err != nil {
 						t.Errorf("Failed to get fd from conn: %v", err)
 						return
 					}
 					if err := conn.Close(); err != nil { // 关闭原始连接，我们使用fd
-						t.Logf("failed to close original connection: %v", err)
+						log.Printf("failed to close original connection: %v", err)
 					}
 
 					// 创建Pulse连接
@@ -79,8 +81,9 @@ func TestOnOpen_RealSocket(t *testing.T) {
 
 				cleanup := func() {
 					if err := listener.Close(); err != nil {
-						t.Logf("failed to close listener: %v", err)
+						log.Printf("failed to close listener: %v", err)
 					}
+					wg.Wait()
 				}
 
 				return addr, cleanup
@@ -98,15 +101,18 @@ func TestOnOpen_RealSocket(t *testing.T) {
 				}
 
 				addr := listener.Addr().String()
+				var wg sync.WaitGroup
 
+				wg.Add(1)
 				go func() {
+					defer wg.Done()
 					conn, err := listener.Accept()
 					if err != nil {
 						return
 					}
 					defer func() {
 						if err := conn.Close(); err != nil {
-							t.Logf("failed to close connection: %v", err)
+							log.Printf("failed to close connection: %v", err)
 						}
 					}()
 
@@ -115,7 +121,7 @@ func TestOnOpen_RealSocket(t *testing.T) {
 						return
 					}
 					if err := conn.Close(); err != nil {
-						t.Logf("failed to close original connection: %v", err)
+						log.Printf("failed to close original connection: %v", err)
 					}
 
 					safeConns := &safeConns[Conn]{}
@@ -134,8 +140,9 @@ func TestOnOpen_RealSocket(t *testing.T) {
 
 				return addr, func() {
 					if err := listener.Close(); err != nil {
-						t.Logf("failed to close listener: %v", err)
+						log.Printf("failed to close listener: %v", err)
 					}
+					wg.Wait()
 				}
 			},
 			clientDelay:  50 * time.Millisecond,
@@ -243,7 +250,7 @@ func TestOnClose_RealSocket(t *testing.T) {
 					// 正常关闭客户端连接
 					time.Sleep(50 * time.Millisecond)
 					if err := clientConn.Close(); err != nil {
-						t.Logf("failed to close client connection: %v", err)
+						log.Printf("failed to close client connection: %v", err)
 					}
 				}, false)
 			},
@@ -270,7 +277,7 @@ func TestOnClose_RealSocket(t *testing.T) {
 				return runClientServerTest(t, callback, func(clientConn net.Conn, pulseConn *Conn) {
 					// 设置短超时
 					if err := pulseConn.SetDeadline(time.Now().Add(30 * time.Millisecond)); err != nil {
-						t.Logf("failed to set deadline: %v", err)
+						log.Printf("failed to set deadline: %v", err)
 					}
 					time.Sleep(50 * time.Millisecond) // 等待超时
 				}, false)
@@ -285,7 +292,7 @@ func TestOnClose_RealSocket(t *testing.T) {
 				return runClientServerTest(t, callback, func(clientConn net.Conn, pulseConn *Conn) {
 					// 模拟网络错误（强制关闭）
 					if err := clientConn.Close(); err != nil {
-						t.Logf("failed to close client connection: %v", err)
+						log.Printf("failed to close client connection: %v", err)
 					}
 					time.Sleep(10 * time.Millisecond)
 				}, true) // 传递错误
@@ -379,7 +386,7 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 	}
 	defer func() {
 		if err := listener.Close(); err != nil {
-			t.Logf("failed to close listener: %v", err)
+			log.Printf("failed to close listener: %v", err)
 		}
 	}()
 
@@ -402,7 +409,7 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 		}
 		defer func() {
 			if err := conn.Close(); err != nil {
-				t.Logf("failed to close connection: %v", err)
+				log.Printf("failed to close connection: %v", err)
 			}
 		}()
 
@@ -413,7 +420,7 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 			return
 		}
 		if err := conn.Close(); err != nil {
-			t.Logf("failed to close original connection: %v", err)
+			log.Printf("failed to close original connection: %v", err)
 		}
 
 		safeConns := &safeConns[Conn]{}
@@ -445,7 +452,7 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 	}
 	defer func() {
 		if err := clientConn.Close(); err != nil {
-			t.Logf("failed to close client connection: %v", err)
+			log.Printf("failed to close client connection: %v", err)
 		}
 	}()
 
@@ -528,7 +535,7 @@ func TestCallback_RealConnectionLifecycle(t *testing.T) {
 	}
 	defer func() {
 		if err := listener.Close(); err != nil {
-			t.Logf("failed to close listener: %v", err)
+			log.Printf("failed to close listener: %v", err)
 		}
 	}()
 
@@ -545,7 +552,7 @@ func TestCallback_RealConnectionLifecycle(t *testing.T) {
 		}
 		defer func() {
 			if err := conn.Close(); err != nil {
-				t.Logf("failed to close connection: %v", err)
+				log.Printf("failed to close connection: %v", err)
 			}
 		}()
 
@@ -554,7 +561,7 @@ func TestCallback_RealConnectionLifecycle(t *testing.T) {
 			return
 		}
 		if err := conn.Close(); err != nil {
-			t.Logf("failed to close original connection: %v", err)
+			log.Printf("failed to close original connection: %v", err)
 		}
 
 		safeConns := &safeConns[Conn]{}
@@ -596,7 +603,7 @@ func TestCallback_RealConnectionLifecycle(t *testing.T) {
 	}
 	defer func() {
 		if err := clientConn.Close(); err != nil {
-			t.Logf("failed to close client connection: %v", err)
+			log.Printf("failed to close client connection: %v", err)
 		}
 	}()
 
@@ -668,7 +675,7 @@ func TestCallback_ConcurrentRealConnections(t *testing.T) {
 	}
 	defer func() {
 		if err := listener.Close(); err != nil {
-			t.Logf("failed to close listener: %v", err)
+			log.Printf("failed to close listener: %v", err)
 		}
 	}()
 
@@ -691,7 +698,7 @@ func TestCallback_ConcurrentRealConnections(t *testing.T) {
 				defer wg.Done()
 				defer func() {
 					if err := conn.Close(); err != nil {
-						t.Logf("failed to close connection: %v", err)
+						log.Printf("failed to close connection: %v", err)
 					}
 				}()
 
@@ -700,7 +707,7 @@ func TestCallback_ConcurrentRealConnections(t *testing.T) {
 					return
 				}
 				if err := conn.Close(); err != nil {
-					t.Logf("failed to close original connection: %v", err)
+					log.Printf("failed to close original connection: %v", err)
 				}
 
 				safeConns := &safeConns[Conn]{}
@@ -731,7 +738,7 @@ func TestCallback_ConcurrentRealConnections(t *testing.T) {
 			}
 			defer func() {
 				if err := clientConn.Close(); err != nil {
-					t.Logf("failed to close client connection: %v", err)
+					log.Printf("failed to close client connection: %v", err)
 				}
 			}()
 			time.Sleep(100 * time.Millisecond)
