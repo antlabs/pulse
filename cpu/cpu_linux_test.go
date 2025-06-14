@@ -1,3 +1,5 @@
+//go:build linux
+
 package cpu
 
 import (
@@ -82,8 +84,8 @@ done:
 	fmt.Printf("CPU spike simulation completed, %#v\n", spikeProcInfo)
 
 	// Calculate CPU usage percentages
-	systemCPUPercent := calculateCPUPercent(initialInfo, spikeInfo)
-	processCPUPercent := calculateProcessCPUPercent(initialProcInfo, spikeProcInfo, initialInfo, spikeInfo)
+	systemCPUPercent := CalculateCPUPercent(initialInfo, spikeInfo)
+	processCPUPercent := CalculateProcessCPUPercent(initialProcInfo, spikeProcInfo, initialInfo, spikeInfo)
 
 	// Print the results
 	fmt.Printf("System CPU Usage: %.2f%%\n", systemCPUPercent)

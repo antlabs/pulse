@@ -1,3 +1,5 @@
+//go:build darwin
+
 package cpu
 
 import (
@@ -84,7 +86,7 @@ done:
 
 	// Calculate CPU usage percentages
 	systemCPUPercent := CalculateCPUPercent(initialInfo, spikeInfo)
-	processCPUPercent := calculateProcessCPUPercent(initialProcInfo, spikeProcInfo, initialInfo, spikeInfo)
+	processCPUPercent := CalculateProcessCPUPercent(initialProcInfo, spikeProcInfo, initialInfo, spikeInfo)
 
 	// Print the results
 	fmt.Printf("System CPU Usage: %.2f%%\n", systemCPUPercent)
@@ -112,8 +114,8 @@ done:
 
 // TestCPUInfoAccuracy tests the accuracy of CPU info by comparing multiple readings
 func TestCPUInfoAccuracy(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("Skipping test on non-Linux platform")
+	if runtime.GOOS != "darwin" {
+		t.Skip("Skipping test on non-Darwin platform")
 	}
 	// Get multiple CPU readings to verify consistency
 	readings := make([]CPUInfo, 5)
