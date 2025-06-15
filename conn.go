@@ -2,7 +2,7 @@ package pulse
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -79,11 +79,13 @@ func (c *Conn) close() {
 		c.safeConns.Del(int(oldFd))
 		if err := core.Close(int(oldFd)); err != nil {
 			// Log the error but don't panic as this is a cleanup function
-			log.Printf("failed to close fd %d: %v", oldFd, err)
+			slog.Error("failed to close fd", "fd", oldFd, "error", err)
 		}
 	}
 	for _, wbuf := range c.wbufList {
-		putBytes(wbuf)
+		if wbuf != nil {
+			putBytes(wbuf)
+		}
 	}
 	c.wbufList = c.wbufList[:0]
 }
@@ -129,13 +131,19 @@ func (c *Conn) Write(data []byte) (int, error) {
 		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil {
 			// 部分写入成功，或者全部失败
 			// 把剩余数据放到缓冲区
+			if n < 0 {
+				n = 0
+			}
 			if n < len(data) {
 				newBuf := getBytes(len(data) - n)
 				copy(*newBuf, data[n:])
-				c.wbufList = append(c.wbufList, newBuf)
 				if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
-					log.Printf("failed to add write event: %v", err)
+					// 如果事件注册失败，释放缓冲区
+					putBytes(newBuf)
+					slog.Error("failed to add write event", "error", err)
+					return n, err
 				}
+				c.wbufList = append(c.wbufList, newBuf)
 			}
 			return n, nil
 		}
@@ -161,11 +169,19 @@ func (c *Conn) Write(data []byte) (int, error) {
 		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil {
 			if n < len(*wbuf) {
 				// 部分写入，移动剩余数据到缓冲区开始位置
-				copy(*wbuf, (*wbuf)[n:])
-				*wbuf = (*wbuf)[:len(*wbuf)-n]
+				if n > 0 {
+					newBuf := getBytes(len(*wbuf) - n)
+					copy(*newBuf, (*wbuf)[n:])
+					putBytes(wbuf)
+					c.wbufList[i] = newBuf
+				}
 				// 释放已处理完的缓冲区
 				for j := lastIndex; j < i; j++ {
+					if c.wbufList[j] == nil {
+						continue
+					}
 					putBytes(c.wbufList[j])
+					c.wbufList[j] = nil
 				}
 				// 移动未处理的缓冲区到列表开始位置
 				copy(c.wbufList, c.wbufList[i:])
@@ -173,6 +189,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 				return len(data), nil
 			}
 			putBytes(wbuf)
+			c.wbufList[i] = nil
 			lastIndex = i + 1
 			continue
 		}
@@ -185,14 +202,14 @@ func (c *Conn) Write(data []byte) (int, error) {
 	// 所有数据都已写入
 	c.wbufList = c.wbufList[:0]
 	if err := c.eventLoop.ResetRead(c.getFd()); err != nil {
-		log.Printf("failed to reset read event: %v", err)
+		slog.Error("failed to reset read event", "error", err)
 	}
 	return len(data), nil
 }
 
 func (c *Conn) flush() {
 	if _, err := c.Write(nil); err != nil {
-		log.Printf("failed to flush write buffer: %v", err)
+		slog.Error("failed to flush write buffer", "error", err)
 	}
 }
 
@@ -229,7 +246,7 @@ func handleData(c *Conn, options *Options, rawData []byte) {
 		}
 		return true
 	}); err != nil {
-		log.Printf("failed to add task: %v", err)
+		slog.Error("failed to add task", "error", err)
 		// 释放newBytes since task failed
 		if newBytes != nil {
 			putBytes(newBytes)

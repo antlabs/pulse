@@ -11,6 +11,7 @@ var (
 	defTaskMax                 = 30000
 	defTaskInitCount           = 8
 	defEventLoopReadBufferSize = 1024 * 4
+	defMaxSocketReadTimes      = 1
 )
 
 type TaskType int
@@ -38,12 +39,20 @@ type taskConfig struct {
 
 // 边缘触发
 type Options struct {
-	callback                Callback
-	task                    taskConfig
-	level                   slog.Level
-	taskType                TaskType
-	triggerType             core.TriggerType
-	eventLoopReadBufferSize int
+	callback                Callback         // 回调函数
+	task                    taskConfig       // 协程池配置
+	level                   slog.Level       // 日志级别
+	taskType                TaskType         // 任务类型
+	triggerType             core.TriggerType // 触发类型, 水平触发还是边缘触发
+	eventLoopReadBufferSize int              // event loop中读buffer的大小
+	maxSocketReadTimes      int              // socket单次最大读取次数
+}
+
+// 最大读取次数
+func WithMaxSocketReadTimes(maxSocketReadTimes int) func(*Options) {
+	return func(o *Options) {
+		o.maxSocketReadTimes = maxSocketReadTimes
+	}
 }
 
 // 设置回调函数

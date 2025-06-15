@@ -98,7 +98,6 @@ func putBytes(bytes *[]byte) {
 	if cap(*bytes)%page != 0 {
 		index-- // 向前挪一格, 可以保证空间是够的
 	}
-	// fmt.Printf("putBytes index: %d\n", index)
 	smallPools[index].Put(bytes)
 }
 
@@ -107,7 +106,6 @@ func putBytes(bytes *[]byte) {
 var bigPools = make([]sync.Pool, 0, 4)
 var bigPoolsSize = []int{
 	512 * 1024,
-	1024 * 1024,
 }
 
 func init() {

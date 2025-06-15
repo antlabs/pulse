@@ -3,6 +3,7 @@ package pulse
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"log/slog"
 	"net"
@@ -42,6 +43,17 @@ func (m *MultiEventLoop) initDefaultSetting() {
 
 	if m.options.eventLoopReadBufferSize == 0 {
 		m.options.eventLoopReadBufferSize = defEventLoopReadBufferSize
+	}
+
+	if m.options.maxSocketReadTimes == 0 {
+		if m.options.triggerType == TriggerTypeLevel {
+			// 水平触发模式下使用默认值
+			m.options.maxSocketReadTimes = defMaxSocketReadTimes
+		} else {
+			// 边缘触发模式下不限制读取次数
+			m.options.maxSocketReadTimes = -1
+		}
+		m.options.maxSocketReadTimes = defMaxSocketReadTimes
 	}
 }
 
@@ -133,14 +145,15 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 				if _, err := eventLoop.Poll(0, func(fd int, state core.State, err error) {
 
 					c := safeConns.GetUnsafe(fd)
+					// c := safeConns.Get(fd)
 					// slog.Debug("poll", "fd", fd, "state", state, "err", err)
 					if err != nil {
 						if errors.Is(err, core.EAGAIN) {
 							return
 						}
 						if c != nil {
-							e.options.callback.OnClose(c, err)
 							c.Close()
+							e.options.callback.OnClose(c, err)
 						}
 						return
 					}
@@ -167,7 +180,11 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 }
 
 func (e *MultiEventLoop) doRead(c *Conn, rbuf []byte) {
-	for {
+	for i := 0; ; i++ {
+		if e.options.maxSocketReadTimes > 0 && i >= e.options.maxSocketReadTimes {
+			return
+		}
+
 		// 循环读取数据
 		c.mu.Lock()
 		n, err := core.Read(c.getFd(), rbuf)
@@ -189,6 +206,9 @@ func (e *MultiEventLoop) doRead(c *Conn, rbuf []byte) {
 		}
 
 		if n == 0 {
+			// 如果不是这个错误直接关闭连接
+			c.Close()
+			e.options.callback.OnClose(c, io.EOF)
 			return
 		}
 		if n > 0 {
