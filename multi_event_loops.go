@@ -215,10 +215,33 @@ func (e *MultiEventLoop) doRead(c *Conn, rbuf []byte) {
 			handleData(c, &e.options, rbuf[:n])
 		}
 
-		if e.options.triggerType == core.TriggerTypeLevel {
-			if n < len(rbuf) {
-				break
-			}
+		// https://man7.org/linux/man-pages/man7/epoll.7.html
+		// Do I need to continuously read/write a file descriptor until
+		// EAGAIN when using the EPOLLET flag (edge-triggered behavior)?
+
+		// Receiving an event from epoll_wait(2) should suggest to you
+		// that such file descriptor is ready for the requested I/O
+		// operation.  You must consider it ready until the next
+		// (nonblocking) read/write yields EAGAIN.  When and how you will
+		// use the file descriptor is entirely up to you.
+
+		// For packet/token-oriented files (e.g., datagram socket,
+		// terminal in canonical mode), the only way to detect the end of
+		// the read/write I/O space is to continue to read/write until
+		// EAGAIN.
+
+		// For stream-oriented files (e.g., pipe, FIFO, stream socket),
+		// the condition that the read/write I/O space is exhausted can
+		// also be detected by checking the amount of data read from /
+		// written to the target file descriptor.  For example, if you
+		// call read(2) by asking to read a certain amount of data and
+		// read(2) returns a lower number of bytes, you can be sure of
+		// having exhausted the read I/O space for the file descriptor.
+		// The same is true when writing using write(2).  (Avoid this
+		// latter technique if you cannot guarantee that the monitored
+		// file descriptor always refers to a stream-oriented file.)
+		if n < len(rbuf) {
+			break
 		}
 	}
 }

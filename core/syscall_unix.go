@@ -70,3 +70,11 @@ func GetFdFromConn(c net.Conn) (newFd int, err error) {
 func duplicateSocket(socketFD int) (int, error) {
 	return unix.Dup(socketFD)
 }
+
+func GetSendBufferSize(fd int) (int, error) {
+	size, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF)
+	if err != nil {
+		return 0, err
+	}
+	return size, nil
+}

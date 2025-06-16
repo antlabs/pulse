@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"syscall"
+	"unsafe"
 )
 
 func Write(fd int, p []byte) (n int, err error) {
@@ -46,4 +47,26 @@ func GetFdFromConn(conn net.Conn) (fd int, err error) {
 
 	// 获取文件描述符
 	return int(file.Fd()), nil
+}
+
+func GetSendBufferSize(fd int) (int, error) {
+	// Convert fd to windows Handle
+	handle := syscall.Handle(fd)
+
+	// Use getsockopt to get send buffer size
+	var size int32
+	var length int32 = 4 // size of int32
+
+	// Call getsockopt with SOL_SOCKET and SO_SNDBUF
+	err := syscall.Getsockopt(
+		handle,
+		syscall.SOL_SOCKET,
+		syscall.SO_SNDBUF,
+		(*byte)(unsafe.Pointer(&size)),
+		&length,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return int(size), nil
 }
