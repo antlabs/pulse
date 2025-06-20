@@ -20,6 +20,12 @@ import (
 	"sync"
 )
 
+const (
+	page        = 1024
+	maxIndex    = 256
+	minPoolSize = page * maxIndex
+)
+
 // 生成的大小分别是
 // 1 * 1024   = 1024
 // 2 * 1024   = 2048
@@ -39,12 +45,6 @@ func init() {
 		})
 	}
 }
-
-const (
-	page        = 1024
-	maxIndex    = 256
-	minPoolSize = page * maxIndex
-)
 
 // 小缓存池 1kb 2kb 3kb 4kb 5kb 6kb 7kb... 256kb
 var smallPools = make([]sync.Pool, 0, maxIndex)

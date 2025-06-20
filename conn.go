@@ -2,6 +2,7 @@ package pulse
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"sync"
@@ -92,26 +93,19 @@ func (c *Conn) close() {
 
 // writeToSocket 尝试将数据写入 socket，并处理中断与临时错误
 func (c *Conn) writeToSocket(data []byte) (int, error) {
-	try := 3 //最多重试3次
-	var lastErr error
 
-	for i := 0; i < try; i++ {
-		n, err := core.Write(c.getFd(), data)
-		if err == nil {
-			return n, nil
-		}
-		if err == syscall.EINTR {
-			lastErr = err
-			continue // 被信号中断，重试
-		}
-		if err == syscall.EAGAIN {
-			return 0, err // 资源暂时不可用
-		}
-		return n, err // 其他错误直接返回
+	n, err := core.Write(c.getFd(), data)
+	if err == nil {
+		return n, nil
 	}
+	if err == syscall.EINTR {
+		return 0, err // 被信号中断，直接返回
+	}
+	if err == syscall.EAGAIN {
+		return 0, err // 资源暂时不可用
+	}
+	return n, err // 其他错误直接返回
 
-	// 如果重试用尽，返回最后的错误
-	return 0, lastErr
 }
 
 func (c *Conn) Write(data []byte) (int, error) {
@@ -136,14 +130,18 @@ func (c *Conn) Write(data []byte) (int, error) {
 			}
 			if n < len(data) {
 				newBuf := getBytes(len(data) - n)
+				if cap(*newBuf) < len(data)-n {
+					putBytes(newBuf)
+					return n, fmt.Errorf("getBytes allocated insufficient capacity: %d < %d", cap(*newBuf), len(data)-n)
+				}
 				copy(*newBuf, data[n:])
+				c.wbufList = append(c.wbufList, newBuf)
 				if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
 					// 如果事件注册失败，释放缓冲区
 					putBytes(newBuf)
 					slog.Error("failed to add write event", "error", err)
 					return n, err
 				}
-				c.wbufList = append(c.wbufList, newBuf)
 			}
 			return n, nil
 		}
@@ -155,52 +153,54 @@ func (c *Conn) Write(data []byte) (int, error) {
 
 	if len(data) > 0 {
 		newBuf := getBytes(len(data))
-		copy(*newBuf, data)
 		if cap(*newBuf) < len(data) {
 			panic("newBuf cap is less than data")
 		}
+		copy(*newBuf, data)
 		*newBuf = (*newBuf)[:len(data)]
 		c.wbufList = append(c.wbufList, newBuf)
 	}
 
-	lastIndex := 0
-	for i, wbuf := range c.wbufList {
+	i := 0
+	for i < len(c.wbufList) {
+		wbuf := c.wbufList[i]
 		n, err := c.writeToSocket(*wbuf)
-		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil {
-			if n < len(*wbuf) {
-				// 部分写入，移动剩余数据到缓冲区开始位置
-				if n > 0 {
-					newBuf := getBytes(len(*wbuf) - n)
-					copy(*newBuf, (*wbuf)[n:])
-					putBytes(wbuf)
-					c.wbufList[i] = newBuf
+		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) {
+			// 部分写入，移动剩余数据到缓冲区开始位置
+			if n > 0 {
+				newBuf := getBytes(len(*wbuf) - n)
+				if cap(*newBuf) < len(*wbuf)-n {
+					putBytes(newBuf)
+					panic(fmt.Sprintf("getBytes allocated insufficient capacity: %d < %d", cap(*newBuf), len(*wbuf)-n))
 				}
-				// 释放已处理完的缓冲区
-				for j := lastIndex; j < i; j++ {
-					if c.wbufList[j] == nil {
-						continue
-					}
-					putBytes(c.wbufList[j])
-					c.wbufList[j] = nil
-				}
-				// 移动未处理的缓冲区到列表开始位置
-				copy(c.wbufList, c.wbufList[i:])
-				c.wbufList = c.wbufList[:len(c.wbufList)-i]
-				return len(data), nil
+
+				copy(*newBuf, (*wbuf)[n:])
+				putBytes(wbuf)
+				c.wbufList[i] = newBuf
 			}
-			putBytes(wbuf)
-			c.wbufList[i] = nil
-			lastIndex = i + 1
-			continue
+			// 注册写事件并退出
+			if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
+				slog.Error("failed to add write event", "error", err)
+				return 0, err
+			}
+			// 移动未处理的缓冲区到列表开始位置
+			copy(c.wbufList, c.wbufList[i:])
+			c.wbufList = c.wbufList[:len(c.wbufList)-i]
+			return len(data), nil
 		}
 
-		// 发生严重错误
-		c.close()
-		return 0, err
+		if err != nil {
+			c.close()
+			return 0, err
+		}
+
+		putBytes(wbuf)
+		c.wbufList[i] = nil
+		i++
 	}
 
 	// 所有数据都已写入
-	c.wbufList = c.wbufList[:0]
+	c.wbufList = nil
 	if err := c.eventLoop.ResetRead(c.getFd()); err != nil {
 		slog.Error("failed to reset read event", "error", err)
 	}

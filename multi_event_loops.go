@@ -164,7 +164,12 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 
 					if state.IsWrite() && c.needFlush() {
 						c.flush()
+						// slog.Error("fd: needFlush", "fd", fd, "len", len(c.wbufList))
+						if e.options.triggerType == core.TriggerTypeLevel && c.needFlush() {
+							return
+						}
 					}
+
 					if state.IsRead() {
 						e.doRead(c, rbuf)
 					}
