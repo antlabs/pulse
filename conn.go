@@ -108,6 +108,39 @@ func (c *Conn) writeToSocket(data []byte) (int, error) {
 
 }
 
+// handlePartialWrite 处理部分写入的情况，创建新缓冲区存储剩余数据
+func (c *Conn) handlePartialWrite(data []byte, n int, needAppend bool) error {
+	if n < 0 {
+		n = 0
+	}
+
+	// 如果已经全部写入，不需要创建新缓冲区
+	if n >= len(data) {
+		return nil
+	}
+
+	remainingSize := len(data) - n
+	newBuf := getBytes(remainingSize)
+	if cap(*newBuf) < remainingSize {
+		putBytes(newBuf)
+		return fmt.Errorf("getBytes allocated insufficient capacity: %d < %d", cap(*newBuf), remainingSize)
+	}
+
+	copy(*newBuf, data[n:])
+	*newBuf = (*newBuf)[:remainingSize]
+
+	if needAppend {
+		c.wbufList = append(c.wbufList, newBuf)
+	}
+	if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
+		// 如果事件注册失败，释放缓冲区
+		putBytes(newBuf)
+		slog.Error("failed to add write event", "error", err)
+		return err
+	}
+	return nil
+}
+
 func (c *Conn) Write(data []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -125,25 +158,11 @@ func (c *Conn) Write(data []byte) (int, error) {
 		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil {
 			// 部分写入成功，或者全部失败
 			// 把剩余数据放到缓冲区
-			if n < 0 {
-				n = 0
+			if err := c.handlePartialWrite(data, n, true); err != nil {
+				c.close()
+				return 0, err
 			}
-			if n < len(data) {
-				newBuf := getBytes(len(data) - n)
-				if cap(*newBuf) < len(data)-n {
-					putBytes(newBuf)
-					return n, fmt.Errorf("getBytes allocated insufficient capacity: %d < %d", cap(*newBuf), len(data)-n)
-				}
-				copy(*newBuf, data[n:])
-				c.wbufList = append(c.wbufList, newBuf)
-				if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
-					// 如果事件注册失败，释放缓冲区
-					putBytes(newBuf)
-					slog.Error("failed to add write event", "error", err)
-					return n, err
-				}
-			}
-			return n, nil
+			return len(data), nil
 		}
 
 		// 发生严重错误
@@ -167,22 +186,12 @@ func (c *Conn) Write(data []byte) (int, error) {
 		n, err := c.writeToSocket(*wbuf)
 		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) {
 			// 部分写入，移动剩余数据到缓冲区开始位置
-			if n > 0 {
-				newBuf := getBytes(len(*wbuf) - n)
-				if cap(*newBuf) < len(*wbuf)-n {
-					putBytes(newBuf)
-					panic(fmt.Sprintf("getBytes allocated insufficient capacity: %d < %d", cap(*newBuf), len(*wbuf)-n))
-				}
-
-				copy(*newBuf, (*wbuf)[n:])
-				putBytes(wbuf)
-				c.wbufList[i] = newBuf
-			}
-			// 注册写事件并退出
-			if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
-				slog.Error("failed to add write event", "error", err)
+			if err := c.handlePartialWrite(*wbuf, n, false); err != nil {
+				c.close()
 				return 0, err
 			}
+
+			*wbuf = (*wbuf)[n:]
 			// 移动未处理的缓冲区到列表开始位置
 			copy(c.wbufList, c.wbufList[i:])
 			c.wbufList = c.wbufList[:len(c.wbufList)-i]
