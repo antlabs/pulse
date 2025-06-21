@@ -19,6 +19,9 @@ func Read(fd int, p []byte) (n int, err error) {
 }
 
 func Close(fd int) error {
+	if fd <= 0 {
+		return nil
+	}
 	return syscall.Close(fd)
 }
 

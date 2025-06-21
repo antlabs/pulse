@@ -2,7 +2,6 @@ package pulse
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"sync"
@@ -15,15 +14,16 @@ import (
 )
 
 type Conn struct {
-	fd         int64
-	wbufList   []*[]byte // write buffer, 为了理精细控制内存使用量
-	mu         sync.Mutex
-	safeConns  *safeConns[Conn]
-	task       driver.TaskExecutor
-	eventLoop  core.PollingApi
-	readTimer  *time.Timer
-	writeTimer *time.Timer
-	session    any // 会话数据
+	fd             int64
+	wbufList       []*[]byte // write buffer, 为了理精细控制内存使用量
+	mu             sync.Mutex
+	safeConns      *safeConns[Conn]
+	task           driver.TaskExecutor
+	eventLoop      core.PollingApi
+	readTimer      *time.Timer
+	writeTimer     *time.Timer
+	session        any // 会话数据
+	readBufferSize int // 读缓冲区大小
 }
 
 func (c *Conn) SetNoDelay(nodelay bool) error {
@@ -33,7 +33,9 @@ func (c *Conn) SetNoDelay(nodelay bool) error {
 func (c *Conn) getFd() int {
 	return int(atomic.LoadInt64(&c.fd))
 }
-func newConn(fd int, safeConns *safeConns[Conn], task selectTasks, taskType TaskType, eventLoop core.PollingApi) *Conn {
+func newConn(fd int, safeConns *safeConns[Conn],
+	task selectTasks, taskType TaskType,
+	eventLoop core.PollingApi, readBufferSize int) *Conn {
 	var taskExecutor driver.TaskExecutor
 	switch taskType {
 	case TaskTypeInConnectionGoroutine:
@@ -47,10 +49,11 @@ func newConn(fd int, safeConns *safeConns[Conn], task selectTasks, taskType Task
 	}
 
 	return &Conn{
-		fd:        int64(fd),
-		safeConns: safeConns,
-		task:      taskExecutor,
-		eventLoop: eventLoop,
+		fd:             int64(fd),
+		safeConns:      safeConns,
+		task:           taskExecutor,
+		eventLoop:      eventLoop,
+		readBufferSize: readBufferSize,
 	}
 }
 
@@ -78,6 +81,7 @@ func (c *Conn) close() {
 	oldFd := atomic.SwapInt64(&c.fd, -1)
 	if oldFd != -1 {
 		c.safeConns.Del(int(oldFd))
+
 		if err := core.Close(int(oldFd)); err != nil {
 			// Log the error but don't panic as this is a cleanup function
 			slog.Error("failed to close fd", "fd", oldFd, "error", err)
@@ -108,6 +112,53 @@ func (c *Conn) writeToSocket(data []byte) (int, error) {
 
 }
 
+// appendToWbufList 将数据添加到写缓冲区列表
+// 先检查最后一个缓冲区是否有足够空间，如果有就直接append
+// 如果没有，将部分数据append到最后一个缓冲区，剩余部分创建新的readBufferSize大小的缓冲区
+func (c *Conn) appendToWbufList(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+
+	// 如果wbufList为空，直接创建新的缓冲区
+	if len(c.wbufList) == 0 {
+		newBuf := getBytesWithSize(len(data), c.readBufferSize)
+		copy(*newBuf, data)
+		*newBuf = (*newBuf)[:len(data)]
+		c.wbufList = append(c.wbufList, newBuf)
+		return
+	}
+
+	// 获取最后一个缓冲区
+	lastBuf := c.wbufList[len(c.wbufList)-1]
+	remainingSpace := cap(*lastBuf) - len(*lastBuf)
+
+	// 如果最后一个缓冲区有足够空间，直接append
+	if remainingSpace >= len(data) {
+		*lastBuf = append(*lastBuf, data...)
+		return
+	}
+
+	// 如果空间不够，先填满最后一个缓冲区
+	if remainingSpace > 0 {
+		*lastBuf = append(*lastBuf, data[:remainingSpace]...)
+		data = data[remainingSpace:] // 剩余的数据
+	}
+
+	// 为剩余数据创建新的缓冲区（使用readBufferSize大小）
+	for len(data) > 0 {
+		newBuf := getBytesWithSize(len(data), c.readBufferSize)
+		copySize := len(data)
+		if copySize > cap(*newBuf) {
+			copySize = cap(*newBuf)
+		}
+		copy(*newBuf, data[:copySize])
+		*newBuf = (*newBuf)[:copySize]
+		c.wbufList = append(c.wbufList, newBuf)
+		data = data[copySize:]
+	}
+}
+
 // handlePartialWrite 处理部分写入的情况，创建新缓冲区存储剩余数据
 func (c *Conn) handlePartialWrite(data []byte, n int, needAppend bool) error {
 	if n < 0 {
@@ -119,22 +170,12 @@ func (c *Conn) handlePartialWrite(data []byte, n int, needAppend bool) error {
 		return nil
 	}
 
-	remainingSize := len(data) - n
-	newBuf := getBytes(remainingSize)
-	if cap(*newBuf) < remainingSize {
-		putBytes(newBuf)
-		return fmt.Errorf("getBytes allocated insufficient capacity: %d < %d", cap(*newBuf), remainingSize)
-	}
-
-	copy(*newBuf, data[n:])
-	*newBuf = (*newBuf)[:remainingSize]
-
+	remainingData := data[n:]
 	if needAppend {
-		c.wbufList = append(c.wbufList, newBuf)
+		c.appendToWbufList(remainingData)
 	}
+
 	if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
-		// 如果事件注册失败，释放缓冲区
-		putBytes(newBuf)
 		slog.Error("failed to add write event", "error", err)
 		return err
 	}
@@ -171,13 +212,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 	}
 
 	if len(data) > 0 {
-		newBuf := getBytes(len(data))
-		if cap(*newBuf) < len(data) {
-			panic("newBuf cap is less than data")
-		}
-		copy(*newBuf, data)
-		*newBuf = (*newBuf)[:len(data)]
-		c.wbufList = append(c.wbufList, newBuf)
+		c.appendToWbufList(data)
 	}
 
 	i := 0
@@ -209,7 +244,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 	}
 
 	// 所有数据都已写入
-	c.wbufList = nil
+	c.wbufList = c.wbufList[:0]
 	if err := c.eventLoop.ResetRead(c.getFd()); err != nil {
 		slog.Error("failed to reset read event", "error", err)
 	}
@@ -241,7 +276,7 @@ func handleData(c *Conn, options *Options, rawData []byte) {
 	}
 
 	var newBytes *[]byte
-	newBytes = getBytes(len(rawData))
+	newBytes = getBytesWithSize(len(rawData), c.readBufferSize)
 	copy(*newBytes, rawData)
 	*newBytes = (*newBytes)[:len(rawData)]
 

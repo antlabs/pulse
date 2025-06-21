@@ -54,6 +54,23 @@ func selectIndex(n int) int {
 	return index
 }
 
+// getBytesWithSize 使用指定的readBufferSize来申请内存池
+func getBytesWithSize(n int, readBufferSize int) (rv *[]byte) {
+	// 如果需要的大小小于等于readBufferSize，直接使用readBufferSize申请
+	if n <= readBufferSize {
+		if readBufferSize < minPoolSize {
+			return getBytes(readBufferSize)
+		}
+
+		rv2 := make([]byte, readBufferSize)
+		rv2 = rv2[:n] // 调整到实际需要的长度
+		return &rv2
+	}
+
+	// 如果需要的大小大于readBufferSize，使用原来的逻辑
+	return getBytes(n)
+}
+
 func getBytes(n int) (rv *[]byte) {
 
 	index := selectIndex(n - 1)
@@ -73,6 +90,7 @@ func getBytes(n int) (rv *[]byte) {
 		return rv
 	}
 
+	// slog.Error("getBytes smallPools[index].Get().(*[]byte)", "index", index)
 	rv = smallPools[index].Get().(*[]byte)
 	*rv = (*rv)[:cap(*rv)]
 	return rv
@@ -81,7 +99,9 @@ func getBytes(n int) (rv *[]byte) {
 func putBytes(bytes *[]byte) {
 
 	if bytes == nil || cap(*bytes) == 0 {
+
 		return
+
 	}
 	if cap(*bytes) < page {
 		return
@@ -98,6 +118,7 @@ func putBytes(bytes *[]byte) {
 	if cap(*bytes)%page != 0 {
 		index-- // 向前挪一格, 可以保证空间是够的
 	}
+	// slog.Error("putBytes smallPools[index].Put(bytes)", "index", index, "cap", cap(*bytes))
 	smallPools[index].Put(bytes)
 }
 

@@ -24,6 +24,7 @@ func main() {
 				if errors.Is(err, core.EAGAIN) {
 					return
 				}
+
 				core.Close(fd)
 				return
 			}

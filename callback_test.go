@@ -66,8 +66,9 @@ func TestOnOpen_RealSocket(t *testing.T) {
 					safeConns.init(1000)
 
 					pulseConn := &Conn{
-						fd:        int64(fd),
-						safeConns: safeConns,
+						fd:             int64(fd),
+						readBufferSize: 4096,
+						safeConns:      safeConns,
 					}
 					safeConns.Add(fd, pulseConn)
 
@@ -128,8 +129,9 @@ func TestOnOpen_RealSocket(t *testing.T) {
 					safeConns.init(1000)
 
 					pulseConn := &Conn{
-						fd:        int64(fd),
-						safeConns: safeConns,
+						fd:             int64(fd),
+						readBufferSize: 4096,
+						safeConns:      safeConns,
 					}
 					safeConns.Add(fd, pulseConn)
 
@@ -427,8 +429,9 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 		safeConns.init(1000)
 
 		pulseConn := &Conn{
-			fd:        int64(fd),
-			safeConns: safeConns,
+			fd:             int64(fd),
+			readBufferSize: 4096,
+			safeConns:      safeConns,
 		}
 		safeConns.Add(fd, pulseConn)
 
@@ -568,8 +571,9 @@ func TestCallback_RealConnectionLifecycle(t *testing.T) {
 		safeConns.init(1000)
 
 		pulseConn := &Conn{
-			fd:        int64(fd),
-			safeConns: safeConns,
+			fd:             int64(fd),
+			readBufferSize: 4096,
+			safeConns:      safeConns,
 		}
 		safeConns.Add(fd, pulseConn)
 
@@ -714,8 +718,9 @@ func TestCallback_ConcurrentRealConnections(t *testing.T) {
 				safeConns.init(1000)
 
 				pulseConn := &Conn{
-					fd:        int64(fd),
-					safeConns: safeConns,
+					fd:             int64(fd),
+					readBufferSize: 4096,
+					safeConns:      safeConns,
 				}
 				safeConns.Add(fd, pulseConn)
 

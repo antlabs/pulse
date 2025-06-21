@@ -11,7 +11,7 @@ import (
 const testSessionData = "test_session"
 
 func Test_OnData(t *testing.T) {
-	c := &Conn{fd: 0}
+	c := &Conn{fd: 0, readBufferSize: 4096}
 	var receivedData []byte
 	var receivedErr error
 	var closeErr error
@@ -106,7 +106,8 @@ func TestConn_SetDeadline(t *testing.T) {
 			}()
 
 			conn := &Conn{
-				fd: int64(fd.Fd()),
+				fd:             int64(fd.Fd()),
+				readBufferSize: 4096,
 				safeConns: &safeConns[Conn]{
 					conns: make([]*Conn, 1000),
 				},
@@ -152,7 +153,8 @@ func TestConn_SetDeadline(t *testing.T) {
 	}()
 
 	conn := &Conn{
-		fd: int64(fd.Fd()),
+		fd:             int64(fd.Fd()),
+		readBufferSize: 4096,
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
@@ -201,7 +203,8 @@ func TestConn_SetReadDeadline(t *testing.T) {
 			}()
 
 			conn := &Conn{
-				fd: int64(fd.Fd()),
+				fd:             int64(fd.Fd()),
+				readBufferSize: 4096,
 				safeConns: &safeConns[Conn]{
 					conns: make([]*Conn, 1000),
 				},
@@ -247,7 +250,8 @@ func TestConn_SetReadDeadline(t *testing.T) {
 	}()
 
 	conn := &Conn{
-		fd: int64(fd.Fd()),
+		fd:             int64(fd.Fd()),
+		readBufferSize: 4096,
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
@@ -296,7 +300,8 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 			}()
 
 			conn := &Conn{
-				fd: int64(fd.Fd()),
+				fd:             int64(fd.Fd()),
+				readBufferSize: 4096,
 				safeConns: &safeConns[Conn]{
 					conns: make([]*Conn, 1000),
 				},
@@ -342,7 +347,8 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 	}()
 
 	conn := &Conn{
-		fd: int64(fd.Fd()),
+		fd:             int64(fd.Fd()),
+		readBufferSize: 4096,
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
@@ -366,7 +372,8 @@ func TestConn_DeadlineTimeout(t *testing.T) {
 	}()
 
 	conn := &Conn{
-		fd: int64(fd.Fd()),
+		fd:             int64(fd.Fd()),
+		readBufferSize: 4096,
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
@@ -415,7 +422,8 @@ func TestConn_DeadlineReset(t *testing.T) {
 
 	fd2 := fd.Fd()
 	conn := &Conn{
-		fd: int64(fd2),
+		fd:             int64(fd2),
+		readBufferSize: 4096,
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
@@ -491,7 +499,8 @@ func TestCallback_OnOpen(t *testing.T) {
 					t.Fatalf("OpenFile() error = %v", err)
 				}
 				return &Conn{
-					fd: int64(fd.Fd()),
+					fd:             int64(fd.Fd()),
+					readBufferSize: 4096,
 					safeConns: &safeConns[Conn]{
 						conns: make([]*Conn, 1000),
 					},
@@ -507,7 +516,8 @@ func TestCallback_OnOpen(t *testing.T) {
 					t.Fatalf("OpenFile() error = %v", err)
 				}
 				conn := &Conn{
-					fd: int64(fd.Fd()),
+					fd:             int64(fd.Fd()),
+					readBufferSize: 4096,
 					safeConns: &safeConns[Conn]{
 						conns: make([]*Conn, 1000),
 					},
@@ -614,7 +624,8 @@ func TestCallback_OnClose(t *testing.T) {
 			}
 
 			conn := &Conn{
-				fd: int64(fd.Fd()),
+				fd:             int64(fd.Fd()),
+				readBufferSize: 4096,
 				safeConns: &safeConns[Conn]{
 					conns: make([]*Conn, 1000),
 				},
@@ -685,7 +696,8 @@ func TestConn_CloseCleanup(t *testing.T) {
 	}
 
 	conn := &Conn{
-		fd: int64(fd.Fd()),
+		fd:             int64(fd.Fd()),
+		readBufferSize: 4096,
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
@@ -768,7 +780,8 @@ func TestConn_CloseWithTimeout(t *testing.T) {
 	}
 
 	conn := &Conn{
-		fd: int64(fd.Fd()),
+		fd:             int64(fd.Fd()),
+		readBufferSize: 4096,
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
@@ -861,7 +874,8 @@ func TestCallback_ToCallback(t *testing.T) {
 	}()
 
 	conn := &Conn{
-		fd: int64(fd.Fd()),
+		fd:             int64(fd.Fd()),
+		readBufferSize: 4096,
 		safeConns: &safeConns[Conn]{
 			conns: make([]*Conn, 1000),
 		},
