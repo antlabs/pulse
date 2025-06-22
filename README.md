@@ -151,7 +151,7 @@ func main() {
 ```go
 type Callback[T any] interface {
     OnOpen(c *Conn)  // 连接建立时调用
-    OnData(c *Conn, data T)     // 接收到数据时调用  
+    OnData(c *Conn, data []byte)     // 接收到数据时调用  
     OnClose(c *Conn, err error) // 连接关闭时调用
 }
 ```
