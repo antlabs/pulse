@@ -39,16 +39,18 @@ type taskConfig struct {
 
 // 边缘触发
 type Options struct {
-	callback                Callback         // 回调函数
-	task                    taskConfig       // 协程池配置
-	level                   slog.Level       // 日志级别
-	taskType                TaskType         // 任务类型
-	triggerType             core.TriggerType // 触发类型, 水平触发还是边缘触发
-	eventLoopReadBufferSize int              // event loop中读buffer的大小
-	maxSocketReadTimes      int              // socket单次最大读取次数
+	callback                   Callback         // 回调函数
+	task                       taskConfig       // 协程池配置
+	level                      *slog.Level      // 日志级别
+	taskType                   TaskType         // 任务类型
+	triggerType                core.TriggerType // 触发类型, 水平触发还是边缘触发
+	eventLoopReadBufferSize    int              // event loop中读buffer的大小
+	maxSocketReadTimes         int              // socket单次最大读取次数
+	flowBackPressure           bool             // 流量背压机制，当连接的写缓冲区满了，会暂停读取，直到写缓冲区有空闲空间
+	flowBackPressureRemoveRead bool             // 流量背压机制，当连接的写缓冲区满了，会移除读事件，直到写缓冲区有空闲空间
 }
 
-// 最大读取次数
+// 单次可读事情，最大读取次数(水平触发模式有效)
 func WithMaxSocketReadTimes(maxSocketReadTimes int) func(*Options) {
 	return func(o *Options) {
 		o.maxSocketReadTimes = maxSocketReadTimes
@@ -65,7 +67,7 @@ func WithCallback(callback Callback) func(*Options) {
 // 设置日志级别
 func WithLogLevel(level slog.Level) func(*Options) {
 	return func(o *Options) {
-		o.level = level
+		o.level = &level
 	}
 }
 
@@ -87,5 +89,19 @@ func WithTriggerType(triggerType core.TriggerType) func(*Options) {
 func WithEventLoopReadBufferSize(size int) func(*Options) {
 	return func(o *Options) {
 		o.eventLoopReadBufferSize = size
+	}
+}
+
+// 设置流量背压机制，当连接的写缓冲区满了，会暂停读取，直到写缓冲区有空闲空间
+func WithFlowBackPressure(enable bool) func(*Options) {
+	return func(o *Options) {
+		o.flowBackPressure = enable
+	}
+}
+
+// 设置流量背压机制，当连接的写缓冲区满了，会移除读事件，直到写缓冲区有空闲空间
+func WithFlowBackPressureRemoveRead(enable bool) func(*Options) {
+	return func(o *Options) {
+		o.flowBackPressureRemoveRead = enable
 	}
 }

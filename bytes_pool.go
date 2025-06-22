@@ -18,6 +18,8 @@ import (
 	"log/slog"
 	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 const (
@@ -44,10 +46,31 @@ func init() {
 			},
 		})
 	}
+	// go debug()
+}
+
+func debug() {
+	for {
+		time.Sleep(time.Second * 1)
+		slog.Info("debug", "index7AllocCount", atomic.LoadInt64(&index7AllocCount),
+			"index7FreeCount", atomic.LoadInt64(&index7FreeCount),
+			"index7AllocSize", atomic.LoadInt64(&index7AllocSize),
+			"index7FreeSize", atomic.LoadInt64(&index7FreeSize),
+		)
+	}
 }
 
 // 小缓存池 1kb 2kb 3kb 4kb 5kb 6kb 7kb... 256kb
 var smallPools = make([]sync.Pool, 0, maxIndex)
+
+// 记录index 7的内存申请和释放次数
+// debug使用
+var (
+	index7AllocCount int64
+	index7FreeCount  int64
+	index7AllocSize  int64
+	index7FreeSize   int64
+)
 
 func selectIndex(n int) int {
 	index := n / page
@@ -85,9 +108,14 @@ func getBytes(n int) (rv *[]byte) {
 			i++
 		}
 		if i == 3 {
-			panic("getBytes getBigBytes failed, need size:" + strconv.Itoa(n) + " got size:" + strconv.Itoa(cap(*rv)))
+			slog.Error("getBytes getBigBytes failed, need size:" + strconv.Itoa(n) + " got size:" + strconv.Itoa(cap(*rv)))
 		}
 		return rv
+	}
+
+	if index == 7 {
+		atomic.AddInt64(&index7AllocCount, 1)
+		atomic.AddInt64(&index7AllocSize, int64(n))
 	}
 
 	// slog.Error("getBytes smallPools[index].Get().(*[]byte)", "index", index)
@@ -117,6 +145,10 @@ func putBytes(bytes *[]byte) {
 	// 如果cap(*bytes)%page != 0 ，说明append的时候扩容了
 	if cap(*bytes)%page != 0 {
 		index-- // 向前挪一格, 可以保证空间是够的
+	}
+	if index == 7 {
+		atomic.AddInt64(&index7FreeCount, 1)
+		atomic.AddInt64(&index7FreeSize, int64(cap(*bytes)))
 	}
 	// slog.Error("putBytes smallPools[index].Put(bytes)", "index", index, "cap", cap(*bytes))
 	smallPools[index].Put(bytes)

@@ -33,6 +33,7 @@ func (c *Conn) SetNoDelay(nodelay bool) error {
 func (c *Conn) getFd() int {
 	return int(atomic.LoadInt64(&c.fd))
 }
+
 func newConn(fd int, safeConns *safeConns[Conn],
 	task selectTasks, taskType TaskType,
 	eventLoop core.PollingApi, readBufferSize int) *Conn {
@@ -160,19 +161,22 @@ func (c *Conn) appendToWbufList(data []byte) {
 }
 
 // handlePartialWrite 处理部分写入的情况，创建新缓冲区存储剩余数据
-func (c *Conn) handlePartialWrite(data []byte, n int, needAppend bool) error {
+func (c *Conn) handlePartialWrite(data *[]byte, n int, needAppend bool) error {
 	if n < 0 {
 		n = 0
 	}
 
 	// 如果已经全部写入，不需要创建新缓冲区
-	if n >= len(data) {
+	if n >= len(*data) {
 		return nil
 	}
 
-	remainingData := data[n:]
+	remainingData := (*data)[n:]
 	if needAppend {
 		c.appendToWbufList(remainingData)
+	} else {
+		copy(*data, (*data)[n:])
+		*data = (*data)[:len(*data)-n]
 	}
 
 	if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
@@ -199,7 +203,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil {
 			// 部分写入成功，或者全部失败
 			// 把剩余数据放到缓冲区
-			if err := c.handlePartialWrite(data, n, true); err != nil {
+			if err := c.handlePartialWrite(&data, n, true); err != nil {
 				c.close()
 				return 0, err
 			}
@@ -221,12 +225,11 @@ func (c *Conn) Write(data []byte) (int, error) {
 		n, err := c.writeToSocket(*wbuf)
 		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) {
 			// 部分写入，移动剩余数据到缓冲区开始位置
-			if err := c.handlePartialWrite(*wbuf, n, false); err != nil {
+			if err := c.handlePartialWrite(wbuf, n, false); err != nil {
 				c.close()
 				return 0, err
 			}
 
-			*wbuf = (*wbuf)[n:]
 			// 移动未处理的缓冲区到列表开始位置
 			copy(c.wbufList, c.wbufList[i:])
 			c.wbufList = c.wbufList[:len(c.wbufList)-i]

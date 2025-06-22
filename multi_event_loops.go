@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 
@@ -26,8 +27,9 @@ type MultiEventLoop struct {
 
 func (m *MultiEventLoop) initDefaultSetting() {
 
-	if m.options.level == 0 {
-		m.options.level = slog.LevelError //
+	if m.options.level == nil {
+		level := slog.LevelError
+		m.options.level = &level
 	}
 	if m.options.task.min == 0 {
 		m.options.task.min = defTaskMin
@@ -98,6 +100,14 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 	wg.Add(1 + len(e.eventLoops))
 	defer wg.Wait()
 
+	// 暂时关闭，分析内存才会打开
+	// go func() {
+	// 	defer wg.Done()
+	// 	for {
+	// 		time.Sleep(time.Second * 1)
+	// 		DebugConns(&safeConns, 10000)
+	// 	}
+	// }()
 	go func() {
 		defer wg.Done()
 		// 统计每个eventLoop的连接数
@@ -167,8 +177,10 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 
 					if state.IsWrite() && c.needFlush() {
 						c.flush()
-						// slog.Error("fd: needFlush", "fd", fd, "len", len(c.wbufList))
-						if e.options.triggerType == core.TriggerTypeLevel && c.needFlush() {
+					}
+
+					if e.options.flowBackPressure && c.needFlush() {
+						if e.options.triggerType == core.TriggerTypeLevel {
 							return
 						}
 					}
@@ -189,7 +201,9 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 
 func (e *MultiEventLoop) doRead(c *Conn, rbuf []byte) {
 	for i := 0; ; i++ {
-		if e.options.maxSocketReadTimes > 0 && i >= e.options.maxSocketReadTimes {
+		if e.options.maxSocketReadTimes > 0 &&
+			i >= e.options.maxSocketReadTimes &&
+			e.options.triggerType == core.TriggerTypeLevel {
 			return
 		}
 
@@ -258,4 +272,91 @@ func (e *MultiEventLoop) Free() {
 	for _, eventLoop := range e.eventLoops {
 		eventLoop.Free()
 	}
+}
+
+// debug 函数，用于打印连接的缓冲区使用情况
+func DebugConns(conns *safeConns[Conn], maxConns int) {
+
+	count := 0
+	var totalBuffers int
+	var totalBytes int
+	for _, conn := range conns.conns {
+		if count >= maxConns {
+			break
+		}
+
+		if conn == nil {
+			continue
+		}
+
+		conn.mu.Lock()
+		numBuffers := len(conn.wbufList)
+		totalBuffers += numBuffers
+
+		for _, buf := range conn.wbufList {
+			if buf != nil {
+				totalBytes += len(*buf)
+			}
+		}
+		conn.mu.Unlock()
+
+		count++
+	}
+
+	// Create slice to store fd and buffer stats for sorting
+	type fdStats struct {
+		fd         int
+		numBuffers int
+		totalBytes int
+	}
+
+	stats := make([]fdStats, 0, count)
+
+	// Collect stats for each connection
+	count = 0
+	for fd, conn := range conns.conns {
+		if count >= maxConns {
+			break
+		}
+		if conn == nil {
+			continue
+		}
+
+		conn.mu.Lock()
+		numBuffers := len(conn.wbufList)
+		bytes := 0
+		for _, buf := range conn.wbufList {
+			if buf != nil {
+				bytes += len(*buf)
+			}
+		}
+		conn.mu.Unlock()
+
+		stats = append(stats, fdStats{
+			fd:         fd,
+			numBuffers: numBuffers,
+			totalBytes: bytes,
+		})
+
+		count++
+	}
+
+	// Sort by number of buffers (descending)
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].numBuffers == stats[j].numBuffers {
+			return stats[i].totalBytes > stats[j].totalBytes
+		}
+		return stats[i].numBuffers > stats[j].numBuffers
+	})
+
+	// Print top 5 connections by buffer count
+	slog.Info("Top connections by buffer count:")
+	for i := 0; i < len(stats) && i < 10; i++ {
+		stat := stats[i]
+		slog.Info("connection stats",
+			"fd", stat.fd,
+			"buffers", stat.numBuffers,
+			"bytes", stat.totalBytes)
+	}
+	slog.Info("total connections", "count", count, "totalBuffers", totalBuffers, "totalBytes", totalBytes)
 }
