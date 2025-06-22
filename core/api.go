@@ -47,6 +47,7 @@ type PollingApi interface {
 	AddRead(fd int) error
 	AddWrite(fd int) error
 	ResetRead(fd int) error
+	DelRead(fd int) error
 	Del(fd int) error
 	Poll(tv time.Duration, cb func(int, State, error)) (retVal int, err error)
 	Free()

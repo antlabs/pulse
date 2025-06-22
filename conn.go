@@ -14,16 +14,19 @@ import (
 )
 
 type Conn struct {
-	fd             int64
-	wbufList       []*[]byte // write buffer, 为了理精细控制内存使用量
-	mu             sync.Mutex
-	safeConns      *safeConns[Conn]
-	task           driver.TaskExecutor
-	eventLoop      core.PollingApi
-	readTimer      *time.Timer
-	writeTimer     *time.Timer
-	session        any // 会话数据
-	readBufferSize int // 读缓冲区大小
+	fd         int64
+	wbufList   []*[]byte // write buffer, 为了理精细控制内存使用量
+	mu         sync.Mutex
+	safeConns  *safeConns[Conn]
+	task       driver.TaskExecutor
+	eventLoop  core.PollingApi
+	readTimer  *time.Timer
+	writeTimer *time.Timer
+	session    any // 会话数据
+
+	// 如果再加字段，可以改成对options的指针的访问, 目前只是浪费了8个字节
+	readBufferSize             int  // 读缓冲区大小
+	flowBackPressureRemoveRead bool // 流量背压机制，当连接的写缓冲区满了，会移除读事件
 }
 
 func (c *Conn) SetNoDelay(nodelay bool) error {
@@ -36,7 +39,7 @@ func (c *Conn) getFd() int {
 
 func newConn(fd int, safeConns *safeConns[Conn],
 	task selectTasks, taskType TaskType,
-	eventLoop core.PollingApi, readBufferSize int) *Conn {
+	eventLoop core.PollingApi, readBufferSize int, flowBackPressureRemoveRead bool) *Conn {
 	var taskExecutor driver.TaskExecutor
 	switch taskType {
 	case TaskTypeInConnectionGoroutine:
@@ -50,11 +53,12 @@ func newConn(fd int, safeConns *safeConns[Conn],
 	}
 
 	return &Conn{
-		fd:             int64(fd),
-		safeConns:      safeConns,
-		task:           taskExecutor,
-		eventLoop:      eventLoop,
-		readBufferSize: readBufferSize,
+		fd:                         int64(fd),
+		safeConns:                  safeConns,
+		task:                       taskExecutor,
+		eventLoop:                  eventLoop,
+		readBufferSize:             readBufferSize,
+		flowBackPressureRemoveRead: flowBackPressureRemoveRead,
 	}
 }
 
@@ -109,7 +113,7 @@ func (c *Conn) writeToSocket(data []byte) (int, error) {
 	if err == syscall.EAGAIN {
 		return 0, err // 资源暂时不可用
 	}
-	return n, err // 其他错误直接返回
+	return 0, err // 其他错误直接返回
 
 }
 
@@ -179,10 +183,19 @@ func (c *Conn) handlePartialWrite(data *[]byte, n int, needAppend bool) error {
 		*data = (*data)[:len(*data)-n]
 	}
 
-	if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
-		slog.Error("failed to add write event", "error", err)
-		return err
+	// 部分写入成功，或者全部失败
+	// 如果启用了流量背压机制且有部分写入，先删除读事件
+	if c.flowBackPressureRemoveRead {
+		if delErr := c.eventLoop.DelRead(c.getFd()); delErr != nil {
+			slog.Error("failed to delete read event", "error", delErr)
+		}
+	} else {
+		if err := c.eventLoop.AddWrite(c.getFd()); err != nil {
+			slog.Error("failed to add write event", "error", err)
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -201,7 +214,9 @@ func (c *Conn) Write(data []byte) (int, error) {
 	if len(c.wbufList) == 0 {
 		n, err := c.writeToSocket(data)
 		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil {
-			// 部分写入成功，或者全部失败
+			if n == len(data) {
+				return n, nil
+			}
 			// 把剩余数据放到缓冲区
 			if err := c.handlePartialWrite(&data, n, true); err != nil {
 				c.close()
@@ -223,8 +238,14 @@ func (c *Conn) Write(data []byte) (int, error) {
 	for i < len(c.wbufList) {
 		wbuf := c.wbufList[i]
 		n, err := c.writeToSocket(*wbuf)
-		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) {
-			// 部分写入，移动剩余数据到缓冲区开始位置
+		if errors.Is(err, core.EAGAIN) || errors.Is(err, core.EINTR) || err == nil /*写入成功，也有n != len(*wbuf)的情况*/ {
+			if n == len(*wbuf) {
+				putBytes(wbuf)
+				c.wbufList[i] = nil
+				i++
+				continue
+			}
+			// 移动剩余数据到缓冲区开始位置
 			if err := c.handlePartialWrite(wbuf, n, false); err != nil {
 				c.close()
 				return 0, err
@@ -236,18 +257,13 @@ func (c *Conn) Write(data []byte) (int, error) {
 			return len(data), nil
 		}
 
-		if err != nil {
-			c.close()
-			return 0, err
-		}
-
-		putBytes(wbuf)
-		c.wbufList[i] = nil
-		i++
+		c.close()
+		return n, err
 	}
 
 	// 所有数据都已写入
 	c.wbufList = c.wbufList[:0]
+	// 如果启用了流量背压机制，重新添加读事件
 	if err := c.eventLoop.ResetRead(c.getFd()); err != nil {
 		slog.Error("failed to reset read event", "error", err)
 	}

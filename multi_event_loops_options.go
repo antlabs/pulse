@@ -100,6 +100,7 @@ func WithFlowBackPressure(enable bool) func(*Options) {
 }
 
 // 设置流量背压机制，当连接的写缓冲区满了，会移除读事件，直到写缓冲区有空闲空间
+// 第二种背压机制会比第一种背压机制更高效, 7945hx cpu上，第二种是3.4GB/s的读写 第一种是3.0GB/s的读写
 func WithFlowBackPressureRemoveRead(enable bool) func(*Options) {
 	return func(o *Options) {
 		o.flowBackPressureRemoveRead = enable

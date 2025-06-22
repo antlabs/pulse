@@ -81,6 +81,9 @@ func Create(triggerType TriggerType) (la PollingApi, err error) {
 	slog.Info("create epoll", "triggerType", triggerType)
 	e.events = make([]syscall.EpollEvent, 1024)
 	e.rev, e.wev, e.dwEv, e.resetEv = getReadWriteDeleteReset(triggerType == TriggerTypeEdge)
+	if e.dwEv == 0 {
+		panic("dwEv is 0")
+	}
 	return &e, nil
 }
 
@@ -131,6 +134,18 @@ func (e *eventPollState) DelWrite(fd int) error {
 		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
 			Events: uint32(e.dwEv),
+		})
+	}
+	return nil
+}
+
+// 删除读事件
+func (e *eventPollState) DelRead(fd int) error {
+	if fd > 0 {
+		// 移除读事件，只保留写事件
+		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
+			Fd:     int32(fd),
+			Events: uint32(syscall.EPOLLOUT),
 		})
 	}
 	return nil

@@ -56,6 +56,11 @@ func (i *iocp) ResetRead(fd int) error {
 	return nil
 }
 
+func (i *iocp) DelRead(fd int) error {
+	i.events[fd] &^= READ
+	return nil
+}
+
 func (i *iocp) Del(fd int) error {
 	delete(i.events, fd)
 	return nil

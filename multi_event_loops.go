@@ -137,7 +137,8 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 			c2 := newConn(fd, &safeConns, e.localTask,
 				e.options.taskType,
 				e.eventLoops[index],
-				e.options.eventLoopReadBufferSize)
+				e.options.eventLoopReadBufferSize,
+				e.options.flowBackPressureRemoveRead)
 			safeConns.Add(fd, c2)
 			e.options.callback.OnOpen(c2)
 			err = e.eventLoops[index].AddRead(fd)

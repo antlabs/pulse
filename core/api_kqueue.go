@@ -79,6 +79,17 @@ func (as *eventPollState) ResetRead(fd int) error {
 	return err
 }
 
+func (as *eventPollState) DelRead(fd int) error {
+	if fd == -1 {
+		return nil
+	}
+
+	_, err := unix.Kevent(as.kqfd, []unix.Kevent_t{
+		{Ident: uint64(fd), Flags: unix.EV_DELETE, Filter: unix.EVFILT_READ},
+	}, nil, nil)
+	return err
+}
+
 func (as *eventPollState) Del(fd int) error {
 	// _, err := unix.Kevent(as.kqfd, []unix.Kevent_t{
 	// 	{Ident: uint64(fd), Flags: unix.EV_DELETE, Filter: unix.EVFILT_READ},

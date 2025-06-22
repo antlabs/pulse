@@ -49,7 +49,7 @@ func init() {
 	// go debug()
 }
 
-func debug() {
+func debugPool() {
 	for {
 		time.Sleep(time.Second * 1)
 		slog.Info("debug", "index7AllocCount", atomic.LoadInt64(&index7AllocCount),
