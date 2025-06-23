@@ -27,6 +27,7 @@ type Conn struct {
 	// 如果再加字段，可以改成对options的指针的访问, 目前只是浪费了8个字节
 	readBufferSize             int  // 读缓冲区大小
 	flowBackPressureRemoveRead bool // 流量背压机制，当连接的写缓冲区满了，会移除读事件
+	readableButNotRead         bool // 垂直触发模式下,表示可读未读取的标记位
 }
 
 func (c *Conn) SetNoDelay(nodelay bool) error {
@@ -263,7 +264,14 @@ func (c *Conn) Write(data []byte) (int, error) {
 
 	// 所有数据都已写入
 	c.wbufList = c.wbufList[:0]
-	// 如果启用了流量背压机制，重新添加读事件
+	// 需要进的逻辑
+	// 1.如果是垂直触发模式，并且启用了流量背压机制，重新添加读事件
+	// 2.如果是水平触发模式也重新添加读事件，为了去掉写事件
+	// 3.如果是垂直触发模式，并且启用了流量背压机制，则需要添加读事件
+
+	// 不需要进的逻辑
+	// 1.如果是垂直触发模式，并且没有启用流量背压机制，不需要重新添加事件, TODO
+
 	if err := c.eventLoop.ResetRead(c.getFd()); err != nil {
 		slog.Error("failed to reset read event", "error", err)
 	}

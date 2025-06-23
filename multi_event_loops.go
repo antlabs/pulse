@@ -184,6 +184,17 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 						if e.options.triggerType == core.TriggerTypeLevel {
 							return
 						}
+
+						if e.options.triggerType == core.TriggerTypeEdge {
+							c.readableButNotRead = true
+							return
+						}
+					}
+
+					if c.readableButNotRead {
+						c.readableButNotRead = false
+						e.doRead(c, rbuf)
+						return
 					}
 
 					if state.IsRead() {
@@ -204,6 +215,7 @@ func (e *MultiEventLoop) doRead(c *Conn, rbuf []byte) {
 	for i := 0; ; i++ {
 		if e.options.maxSocketReadTimes > 0 &&
 			i >= e.options.maxSocketReadTimes &&
+			// TODO
 			e.options.triggerType == core.TriggerTypeLevel {
 			return
 		}

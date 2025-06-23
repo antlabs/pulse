@@ -32,16 +32,18 @@ const (
 	// it is possible to add the file descriptor inside the epoll interface (EPOLL_CTL_ADD) once by specifying (EPOLLIN|EPOLLOUT).
 	// This allows you to avoid con‐
 	// tinuously switching between EPOLLIN and EPOLLOUT calling epoll_ctl(2) with EPOLL_CTL_MOD.
-	etRead      = int(syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | -syscall.EPOLLET)
-	etWrite     = int(0)
-	etDelWrite  = int(0)
-	etResetRead = int(0)
+	etAddRead   = int(syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | -syscall.EPOLLET)
+	etAddWrite  = int(0)
+	etDelRead   = int(syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLOUT | -syscall.EPOLLET)
+	etDelWrite  = int(syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLOUT | -syscall.EPOLLET)
+	etResetRead = int(etAddRead)
 
 	// 水平触发
-	ltRead      = int(syscall.EPOLLIN | syscall.EPOLLRDHUP | syscall.EPOLLHUP | syscall.EPOLLERR | syscall.EPOLLPRI)
-	ltWrite     = int(ltRead | syscall.EPOLLOUT)
-	ltDelWrite  = int(ltRead)
-	ltResetRead = int(ltRead)
+	ltAddRead   = int(syscall.EPOLLIN | syscall.EPOLLRDHUP | syscall.EPOLLHUP | syscall.EPOLLERR | syscall.EPOLLPRI)
+	ltAddWrite  = int(ltAddRead | syscall.EPOLLOUT)
+	ltDelRead   = int(syscall.EPOLLOUT | syscall.EPOLLRDHUP | syscall.EPOLLHUP | syscall.EPOLLERR | syscall.EPOLLPRI)
+	ltDelWrite  = int(ltAddRead)
+	ltResetRead = int(ltAddRead)
 
 	// 写事件
 	processWrite = uint32(syscall.EPOLLOUT)
@@ -58,16 +60,17 @@ type eventPollState struct {
 	et      bool
 	rev     int
 	wev     int
+	drEv    int // delete read event
 	dwEv    int // delete write event
 	resetEv int
 }
 
-func getReadWriteDeleteReset(et bool) (int, int, int, int) {
+func getReadWriteDeleteReset(et bool) (int, int, int, int, int) {
 	if et {
-		return etRead, etWrite, etDelWrite, etResetRead
+		return etAddRead, etAddWrite, etDelRead, etDelWrite, etResetRead
 	}
 
-	return ltRead, ltWrite, ltDelWrite, ltResetRead
+	return ltAddRead, ltAddWrite, etDelRead, ltDelWrite, ltResetRead
 }
 
 // 创建epoll handler
@@ -80,7 +83,7 @@ func Create(triggerType TriggerType) (la PollingApi, err error) {
 
 	slog.Info("create epoll", "triggerType", triggerType)
 	e.events = make([]syscall.EpollEvent, 1024)
-	e.rev, e.wev, e.dwEv, e.resetEv = getReadWriteDeleteReset(triggerType == TriggerTypeEdge)
+	e.rev, e.wev, e.drEv, e.dwEv, e.resetEv = getReadWriteDeleteReset(triggerType == TriggerTypeEdge)
 	return &e, nil
 }
 
