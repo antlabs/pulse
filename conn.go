@@ -17,7 +17,7 @@ type Conn struct {
 	fd         int64
 	wbufList   []*[]byte // write buffer, 为了理精细控制内存使用量
 	mu         sync.Mutex
-	safeConns  *safeConns[Conn]
+	safeConns  *core.SafeConns[Conn]
 	task       driver.TaskExecutor
 	eventLoop  core.PollingApi
 	readTimer  *time.Timer
@@ -38,7 +38,7 @@ func (c *Conn) getFd() int {
 	return int(atomic.LoadInt64(&c.fd))
 }
 
-func newConn(fd int, safeConns *safeConns[Conn],
+func newConn(fd int, safeConns *core.SafeConns[Conn],
 	task selectTasks, taskType TaskType,
 	eventLoop core.PollingApi, readBufferSize int, flowBackPressureRemoveRead bool) *Conn {
 	var taskExecutor driver.TaskExecutor

@@ -1,4 +1,4 @@
-package pulse
+package core
 
 import (
 	"testing"
@@ -9,8 +9,8 @@ type testConn struct {
 }
 
 func TestSafeConns_AddAndGet(t *testing.T) {
-	var safeConns safeConns[testConn]
-	safeConns.init(100)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(100)
 
 	// 测试添加和获取连接
 	conn := &testConn{id: 1}
@@ -43,8 +43,8 @@ func TestSafeConns_AddAndGet(t *testing.T) {
 }
 
 func TestSafeConns_Concurrent(t *testing.T) {
-	var safeConns safeConns[testConn]
-	safeConns.init(1000)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(1000)
 
 	// 并发测试
 	t.Run("concurrent add and get", func(t *testing.T) {
@@ -82,8 +82,8 @@ func TestSafeConns_Concurrent(t *testing.T) {
 }
 
 func BenchmarkSafeConns_Get(b *testing.B) {
-	var safeConns safeConns[testConn]
-	safeConns.init(1000)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(1000)
 
 	// 预先添加一些连接
 	for i := 0; i < 100; i++ {
@@ -101,8 +101,8 @@ func BenchmarkSafeConns_Get(b *testing.B) {
 }
 
 func BenchmarkSafeConns_Get_Sequential(b *testing.B) {
-	var safeConns safeConns[testConn]
-	safeConns.init(1000)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(1000)
 
 	// 预先添加一些连接
 	for i := 0; i < 100; i++ {
@@ -118,8 +118,8 @@ func BenchmarkSafeConns_Get_Sequential(b *testing.B) {
 }
 
 func BenchmarkSafeConns_Get_NotFound(b *testing.B) {
-	var safeConns safeConns[testConn]
-	safeConns.init(1000)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(1000)
 
 	// 预先添加一些连接
 	for i := 0; i < 100; i++ {
@@ -135,8 +135,8 @@ func BenchmarkSafeConns_Get_NotFound(b *testing.B) {
 }
 
 func BenchmarkSafeConns_Get_OutOfRange(b *testing.B) {
-	var safeConns safeConns[testConn]
-	safeConns.init(100)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(100)
 
 	// 预先添加一些连接
 	for i := 0; i < 50; i++ {
@@ -152,7 +152,7 @@ func BenchmarkSafeConns_Get_OutOfRange(b *testing.B) {
 }
 
 // 不使用原子变量的简化版 Get 方法，仅用于性能对比
-func (s *safeConns[T]) GetNonAtomic(fd int) *T {
+func (s *SafeConns[T]) GetNonAtomic(fd int) *T {
 	if fd == -1 {
 		return nil
 	}
@@ -165,8 +165,8 @@ func (s *safeConns[T]) GetNonAtomic(fd int) *T {
 }
 
 func BenchmarkSafeConns_Get_NonAtomic(b *testing.B) {
-	var safeConns safeConns[testConn]
-	safeConns.init(1000)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(1000)
 
 	// 预先添加一些连接
 	for i := 0; i < 100; i++ {
@@ -184,8 +184,8 @@ func BenchmarkSafeConns_Get_NonAtomic(b *testing.B) {
 }
 
 func BenchmarkSafeConns_Get_NonAtomic_Sequential(b *testing.B) {
-	var safeConns safeConns[testConn]
-	safeConns.init(1000)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(1000)
 
 	// 预先添加一些连接
 	for i := 0; i < 100; i++ {
@@ -201,8 +201,8 @@ func BenchmarkSafeConns_Get_NonAtomic_Sequential(b *testing.B) {
 }
 
 func BenchmarkSafeConns_Get_NonAtomic_NotFound(b *testing.B) {
-	var safeConns safeConns[testConn]
-	safeConns.init(1000)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(1000)
 
 	// 预先添加一些连接
 	for i := 0; i < 100; i++ {
@@ -218,8 +218,8 @@ func BenchmarkSafeConns_Get_NonAtomic_NotFound(b *testing.B) {
 }
 
 func BenchmarkSafeConns_Get_NonAtomic_OutOfRange(b *testing.B) {
-	var safeConns safeConns[testConn]
-	safeConns.init(100)
+	var safeConns SafeConns[testConn]
+	safeConns.Init(100)
 
 	// 预先添加一些连接
 	for i := 0; i < 50; i++ {

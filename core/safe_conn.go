@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package pulse
+package core
 
 import (
 	"sync"
@@ -21,19 +21,19 @@ import (
 
 const ptrSize = 4 << (^uintptr(0) >> 63)
 
-type safeConns[T any] struct {
+type SafeConns[T any] struct {
 	mu       sync.Mutex
 	conns    []*T
 	connsPtr **T
 	len      uintptr
 }
 
-func (s *safeConns[T]) init(max int) {
+func (s *SafeConns[T]) Init(max int) {
 	s.conns = make([]*T, max)
 	s.connsPtr = &s.conns[0]
 }
 
-func (s *safeConns[T]) Add(fd int, c *T) {
+func (s *SafeConns[T]) Add(fd int, c *T) {
 	if fd == -1 {
 		return
 	}
@@ -61,7 +61,7 @@ func add(base unsafe.Pointer, index uintptr) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(base) + index*ptrSize)
 }
 
-func (s *safeConns[T]) addInner(fd int, c *T) {
+func (s *SafeConns[T]) addInner(fd int, c *T) {
 
 	if fd == -1 {
 		return
@@ -79,7 +79,7 @@ func (s *safeConns[T]) addInner(fd int, c *T) {
 		unsafe.Pointer(c))
 }
 
-func (s *safeConns[T]) Del(fd int) {
+func (s *SafeConns[T]) Del(fd int) {
 
 	if fd == -1 {
 		return
@@ -97,11 +97,11 @@ func (s *safeConns[T]) Del(fd int) {
 		nil)
 }
 
-func (s *safeConns[T]) GetUnsafe(fd int) *T {
+func (s *SafeConns[T]) GetUnsafe(fd int) *T {
 	return s.conns[fd]
 }
 
-func (s *safeConns[T]) Get(fd int) *T {
+func (s *SafeConns[T]) Get(fd int) *T {
 	if fd == -1 {
 		return nil
 	}
@@ -115,4 +115,8 @@ func (s *safeConns[T]) Get(fd int) *T {
 		add(
 			atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&s.connsPtr))),
 			uintptr(fd)))))
+}
+
+func (s *SafeConns[T]) UnsafeConns() []*T {
+	return s.conns
 }

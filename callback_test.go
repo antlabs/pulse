@@ -62,8 +62,8 @@ func TestOnOpen_RealSocket(t *testing.T) {
 					}
 
 					// 创建Pulse连接
-					safeConns := &safeConns[Conn]{}
-					safeConns.init(1000)
+					safeConns := &core.SafeConns[Conn]{}
+					safeConns.Init(1000)
 
 					pulseConn := &Conn{
 						fd:             int64(fd),
@@ -125,8 +125,8 @@ func TestOnOpen_RealSocket(t *testing.T) {
 						log.Printf("failed to close original connection: %v", err)
 					}
 
-					safeConns := &safeConns[Conn]{}
-					safeConns.init(1000)
+					safeConns := &core.SafeConns[Conn]{}
+					safeConns.Init(1000)
 
 					pulseConn := &Conn{
 						fd:             int64(fd),
@@ -425,8 +425,8 @@ func runClientServerTest(t *testing.T, callback Callback, scenario func(net.Conn
 			log.Printf("failed to close original connection: %v", err)
 		}
 
-		safeConns := &safeConns[Conn]{}
-		safeConns.init(1000)
+		safeConns := &core.SafeConns[Conn]{}
+		safeConns.Init(1000)
 
 		pulseConn := &Conn{
 			fd:             int64(fd),
@@ -567,8 +567,8 @@ func TestCallback_RealConnectionLifecycle(t *testing.T) {
 			log.Printf("failed to close original connection: %v", err)
 		}
 
-		safeConns := &safeConns[Conn]{}
-		safeConns.init(1000)
+		safeConns := &core.SafeConns[Conn]{}
+		safeConns.Init(1000)
 
 		pulseConn := &Conn{
 			fd:             int64(fd),
@@ -714,8 +714,8 @@ func TestCallback_ConcurrentRealConnections(t *testing.T) {
 					log.Printf("failed to close original connection: %v", err)
 				}
 
-				safeConns := &safeConns[Conn]{}
-				safeConns.init(1000)
+				safeConns := &core.SafeConns[Conn]{}
+				safeConns.Init(1000)
 
 				pulseConn := &Conn{
 					fd:             int64(fd),

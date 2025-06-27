@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/antlabs/pulse/core"
 )
 
 const testSessionData = "test_session"
@@ -108,9 +110,7 @@ func TestConn_SetDeadline(t *testing.T) {
 			conn := &Conn{
 				fd:             int64(fd.Fd()),
 				readBufferSize: 4096,
-				safeConns: &safeConns[Conn]{
-					conns: make([]*Conn, 1000),
-				},
+				safeConns:      &core.SafeConns[Conn]{},
 			}
 
 			err = conn.SetDeadline(tt.time)
@@ -155,9 +155,7 @@ func TestConn_SetDeadline(t *testing.T) {
 	conn := &Conn{
 		fd:             int64(fd.Fd()),
 		readBufferSize: 4096,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
+		safeConns:      &core.SafeConns[Conn]{},
 	}
 	conn.close()
 	err = conn.SetDeadline(time.Now().Add(time.Second))
@@ -205,9 +203,7 @@ func TestConn_SetReadDeadline(t *testing.T) {
 			conn := &Conn{
 				fd:             int64(fd.Fd()),
 				readBufferSize: 4096,
-				safeConns: &safeConns[Conn]{
-					conns: make([]*Conn, 1000),
-				},
+				safeConns:      &core.SafeConns[Conn]{},
 			}
 
 			err = conn.SetReadDeadline(tt.time)
@@ -252,9 +248,7 @@ func TestConn_SetReadDeadline(t *testing.T) {
 	conn := &Conn{
 		fd:             int64(fd.Fd()),
 		readBufferSize: 4096,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
+		safeConns:      &core.SafeConns[Conn]{},
 	}
 	conn.close()
 	err = conn.SetReadDeadline(time.Now().Add(time.Second))
@@ -302,9 +296,7 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 			conn := &Conn{
 				fd:             int64(fd.Fd()),
 				readBufferSize: 4096,
-				safeConns: &safeConns[Conn]{
-					conns: make([]*Conn, 1000),
-				},
+				safeConns:      &core.SafeConns[Conn]{},
 			}
 
 			err = conn.SetWriteDeadline(tt.time)
@@ -349,9 +341,7 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 	conn := &Conn{
 		fd:             int64(fd.Fd()),
 		readBufferSize: 4096,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
+		safeConns:      &core.SafeConns[Conn]{},
 	}
 	conn.close()
 	err = conn.SetWriteDeadline(time.Now().Add(time.Second))
@@ -374,9 +364,7 @@ func TestConn_DeadlineTimeout(t *testing.T) {
 	conn := &Conn{
 		fd:             int64(fd.Fd()),
 		readBufferSize: 4096,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
+		safeConns:      &core.SafeConns[Conn]{},
 	}
 
 	// 设置一个很短的超时时间
@@ -424,9 +412,7 @@ func TestConn_DeadlineReset(t *testing.T) {
 	conn := &Conn{
 		fd:             int64(fd2),
 		readBufferSize: 4096,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
+		safeConns:      &core.SafeConns[Conn]{},
 	}
 
 	// 设置初始超时 - 相对较短的时间
@@ -501,9 +487,7 @@ func TestCallback_OnOpen(t *testing.T) {
 				return &Conn{
 					fd:             int64(fd.Fd()),
 					readBufferSize: 4096,
-					safeConns: &safeConns[Conn]{
-						conns: make([]*Conn, 1000),
-					},
+					safeConns:      &core.SafeConns[Conn]{},
 				}
 			},
 		},
@@ -518,9 +502,7 @@ func TestCallback_OnOpen(t *testing.T) {
 				conn := &Conn{
 					fd:             int64(fd.Fd()),
 					readBufferSize: 4096,
-					safeConns: &safeConns[Conn]{
-						conns: make([]*Conn, 1000),
-					},
+					safeConns:      &core.SafeConns[Conn]{},
 				}
 				conn.SetSession("test_session_data")
 				return conn
@@ -626,9 +608,7 @@ func TestCallback_OnClose(t *testing.T) {
 			conn := &Conn{
 				fd:             int64(fd.Fd()),
 				readBufferSize: 4096,
-				safeConns: &safeConns[Conn]{
-					conns: make([]*Conn, 1000),
-				},
+				safeConns:      &core.SafeConns[Conn]{},
 			}
 
 			var onCloseCalled bool
@@ -698,9 +678,7 @@ func TestConn_CloseCleanup(t *testing.T) {
 	conn := &Conn{
 		fd:             int64(fd.Fd()),
 		readBufferSize: 4096,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
+		safeConns:      &core.SafeConns[Conn]{},
 	}
 
 	// 设置一些状态用于测试清理
@@ -782,9 +760,7 @@ func TestConn_CloseWithTimeout(t *testing.T) {
 	conn := &Conn{
 		fd:             int64(fd.Fd()),
 		readBufferSize: 4096,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
+		safeConns:      &core.SafeConns[Conn]{},
 	}
 
 	var onCloseCallbackCalled bool
@@ -876,9 +852,7 @@ func TestCallback_ToCallback(t *testing.T) {
 	conn := &Conn{
 		fd:             int64(fd.Fd()),
 		readBufferSize: 4096,
-		safeConns: &safeConns[Conn]{
-			conns: make([]*Conn, 1000),
-		},
+		safeConns:      &core.SafeConns[Conn]{},
 	}
 	defer conn.Close()
 

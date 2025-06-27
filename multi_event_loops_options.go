@@ -96,6 +96,7 @@ func WithEventLoopReadBufferSize(size int) func(*Options) {
 // 目前垂直(et)触发模式下会有问题
 // 如果要在et模式实现流量背压机制，就需要自己管理fd的可读/可写状态, 因为内核只会在 不可读->可读 的时候触发事件, 可读但是未读取的时候不会触发事件
 // 可写同理, 可写->不可写 的时候触发事件, 不可写但是未写入的时候不会触发事件
+// TODO et模式支持下
 func WithFlowBackPressure(enable bool) func(*Options) {
 	return func(o *Options) {
 		o.flowBackPressure = enable
@@ -104,6 +105,7 @@ func WithFlowBackPressure(enable bool) func(*Options) {
 
 // 设置流量背压机制，当连接的写缓冲区满了，会移除读事件，直到写缓冲区有空闲空间
 // 第二种背压机制会比第一种背压机制更高效(lt模式下，et没有实现), 7945hx cpu上，第二种是3.4GB/s的读写 第一种是3.0GB/s的读写
+// TODO et模式优化下
 func WithFlowBackPressureRemoveRead(enable bool) func(*Options) {
 	return func(o *Options) {
 		o.flowBackPressureRemoveRead = enable

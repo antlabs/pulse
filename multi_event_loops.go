@@ -87,8 +87,8 @@ func NewMultiEventLoop(ctx context.Context, options ...func(*Options)) (e *Multi
 
 func (e *MultiEventLoop) ListenAndServe(addr string) error {
 	slog.Debug("listenAndServe", "addr", addr)
-	var safeConns safeConns[Conn]
-	safeConns.init(core.GetMaxFd())
+	var safeConns core.SafeConns[Conn]
+	safeConns.Init(core.GetMaxFd())
 
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -288,12 +288,12 @@ func (e *MultiEventLoop) Free() {
 }
 
 // debug 函数，用于打印连接的缓冲区使用情况
-func DebugConns(conns *safeConns[Conn], maxConns int) {
+func DebugConns(conns *core.SafeConns[Conn], maxConns int) {
 
 	count := 0
 	var totalBuffers int
 	var totalBytes int
-	for _, conn := range conns.conns {
+	for _, conn := range conns.UnsafeConns() {
 		if count >= maxConns {
 			break
 		}
@@ -327,7 +327,7 @@ func DebugConns(conns *safeConns[Conn], maxConns int) {
 
 	// Collect stats for each connection
 	count = 0
-	for fd, conn := range conns.conns {
+	for fd, conn := range conns.UnsafeConns() {
 		if count >= maxConns {
 			break
 		}
