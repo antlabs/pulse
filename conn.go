@@ -66,10 +66,10 @@ func newConn(fd int, safeConns *core.SafeConns[Conn],
 func (c *Conn) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.close()
+	c.closeNoLock()
 }
 
-func (c *Conn) close() {
+func (c *Conn) closeNoLock() {
 	if atomic.LoadInt64(&c.fd) == -1 {
 		return
 	}
@@ -220,14 +220,14 @@ func (c *Conn) Write(data []byte) (int, error) {
 			}
 			// 把剩余数据放到缓冲区
 			if err := c.handlePartialWrite(&data, n, true); err != nil {
-				c.close()
+				c.closeNoLock()
 				return 0, err
 			}
 			return len(data), nil
 		}
 
 		// 发生严重错误
-		c.close()
+		c.closeNoLock()
 		return n, err
 	}
 
@@ -248,7 +248,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 			}
 			// 移动剩余数据到缓冲区开始位置
 			if err := c.handlePartialWrite(wbuf, n, false); err != nil {
-				c.close()
+				c.closeNoLock()
 				return 0, err
 			}
 
@@ -258,7 +258,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 			return len(data), nil
 		}
 
-		c.close()
+		c.closeNoLock()
 		return n, err
 	}
 
@@ -372,7 +372,7 @@ func (c *Conn) setReadDeadlineCore(t time.Time) error {
 	// Create new timer
 	duration := time.Until(t)
 	if duration <= 0 {
-		c.close()
+		c.closeNoLock()
 		return nil
 	}
 
@@ -380,7 +380,7 @@ func (c *Conn) setReadDeadlineCore(t time.Time) error {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if atomic.LoadInt64(&c.fd) != -1 {
-			c.close()
+			c.closeNoLock()
 		}
 	})
 
@@ -413,7 +413,7 @@ func (c *Conn) setWriteDeadlineCore(t time.Time) error {
 	// Create new timer
 	duration := time.Until(t)
 	if duration <= 0 {
-		c.close()
+		c.closeNoLock()
 		return nil
 	}
 
@@ -421,7 +421,7 @@ func (c *Conn) setWriteDeadlineCore(t time.Time) error {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if atomic.LoadInt64(&c.fd) != -1 {
-			c.close()
+			c.closeNoLock()
 		}
 	})
 

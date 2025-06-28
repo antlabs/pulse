@@ -157,7 +157,7 @@ func TestConn_SetDeadline(t *testing.T) {
 		readBufferSize: 4096,
 		safeConns:      &core.SafeConns[Conn]{},
 	}
-	conn.close()
+	conn.closeNoLock()
 	err = conn.SetDeadline(time.Now().Add(time.Second))
 	if err == nil {
 		t.Error("SetDeadline() should return error when connection is closed")
@@ -250,7 +250,7 @@ func TestConn_SetReadDeadline(t *testing.T) {
 		readBufferSize: 4096,
 		safeConns:      &core.SafeConns[Conn]{},
 	}
-	conn.close()
+	conn.closeNoLock()
 	err = conn.SetReadDeadline(time.Now().Add(time.Second))
 	if err == nil {
 		t.Error("SetReadDeadline() should return error when connection is closed")
@@ -343,7 +343,7 @@ func TestConn_SetWriteDeadline(t *testing.T) {
 		readBufferSize: 4096,
 		safeConns:      &core.SafeConns[Conn]{},
 	}
-	conn.close()
+	conn.closeNoLock()
 	err = conn.SetWriteDeadline(time.Now().Add(time.Second))
 	if err == nil {
 		t.Error("SetWriteDeadline() should return error when connection is closed")
