@@ -44,11 +44,11 @@ func newConn(fd int, safeConns *core.SafeConns[Conn],
 	var taskExecutor driver.TaskExecutor
 	switch taskType {
 	case TaskTypeInConnectionGoroutine:
-		taskExecutor = task.newTask("stream")
+		taskExecutor = task.newTask("onebyone")
 	case TaskTypeInEventLoop:
 		// 不做任何事情
 	case TaskTypeInBusinessGoroutine:
-		taskExecutor = task.newTask("stream2")
+		taskExecutor = task.newTask("stream")
 	default:
 		panic("invalid task type")
 	}

@@ -15,8 +15,8 @@ import (
 
 	"github.com/antlabs/pulse/core"
 	"github.com/antlabs/task/task/driver"
+	_ "github.com/antlabs/task/task/onebyone"
 	_ "github.com/antlabs/task/task/stream"
-	_ "github.com/antlabs/task/task/stream2"
 )
 
 type MultiEventLoop struct {
@@ -180,6 +180,8 @@ func (e *MultiEventLoop) ListenAndServe(addr string) error {
 						c.flush()
 					}
 
+					// flowBackPressure 主要是为了和删除读事件的背压模式做对比用的
+					// 目前来看，删除读事件的背压模式更高效
 					if e.options.flowBackPressure && c.needFlush() {
 						if e.options.triggerType == core.TriggerTypeLevel {
 							return
