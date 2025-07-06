@@ -14,9 +14,8 @@ import (
 	"time"
 
 	"github.com/antlabs/pulse/core"
+	_ "github.com/antlabs/task/task"
 	"github.com/antlabs/task/task/driver"
-	_ "github.com/antlabs/task/task/onebyone"
-	_ "github.com/antlabs/task/task/stream"
 )
 
 type MultiEventLoop struct {

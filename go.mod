@@ -3,7 +3,7 @@ module github.com/antlabs/pulse
 go 1.24.1
 
 require (
-	github.com/antlabs/task v0.0.0-20250629140636-3fd744b4c2c7
+	github.com/antlabs/task v0.0.0-20250706062027-01bf850b8b0d
 	golang.org/x/sys v0.31.0
 )
 

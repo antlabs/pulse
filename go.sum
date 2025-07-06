@@ -1,5 +1,5 @@
-github.com/antlabs/task v0.0.0-20250629140636-3fd744b4c2c7 h1:Q+whQMX7LjTNx2zp56ZBlz5NnzeBMy8U2i/RaLSmlJM=
-github.com/antlabs/task v0.0.0-20250629140636-3fd744b4c2c7/go.mod h1:6YSWbWdHmW/4s9L0RkmiSCqAf0qmhmb119yzaSbJXww=
+github.com/antlabs/task v0.0.0-20250706062027-01bf850b8b0d h1:XCtR+ajGGIB8i/X4VraLEWuBP7ZnVP11H2vZ/NPdaes=
+github.com/antlabs/task v0.0.0-20250706062027-01bf850b8b0d/go.mod h1:6YSWbWdHmW/4s9L0RkmiSCqAf0qmhmb119yzaSbJXww=
 github.com/ebitengine/purego v0.8.4 h1:CF7LEKg5FFOsASUj0+QwaXf8Ht6TlFxg09+S9wz0omw=
 github.com/ebitengine/purego v0.8.4/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
 golang.org/x/sys v0.31.0 h1:ioabZlmFYtWhL+TRYpcnNlLwhyxaM9kWTDEmfnprqik=
