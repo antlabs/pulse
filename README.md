@@ -144,6 +144,56 @@ func main() {
 }
 ```
 
+## 客户端事件循环示例
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"github.com/antlabs/pulse"
+)
+
+type MyClientHandler struct{}
+
+func (h *MyClientHandler) OnOpen(c *pulse.Conn) {
+	if err != nil {
+		fmt.Println("连接失败:", err)
+		return
+	}
+	fmt.Println("连接成功")
+	c.Write([]byte("hello server!"))
+}
+
+func (h *MyClientHandler) OnData(c *pulse.Conn, data []byte) {
+	fmt.Println("收到数据:", string(data))
+}
+
+func (h *MyClientHandler) OnClose(c *pulse.Conn, err error) {
+	fmt.Println("连接关闭", err)
+}
+
+func main() {
+	conn1, err := net.Dial("tcp", "127.0.0.1:8080")
+	if err != nil {
+		panic(err)
+	}
+	conn2, err := net.Dial("tcp", "127.0.0.1:8081")
+	if err != nil {
+		panic(err)
+	}
+	loop := pulse.NewClientEventLoop(
+		context.Background(),
+		pulse.WithCallback(&MyClientHandler{}),
+	)
+	loop.RegisterConn(conn1)
+	loop.RegisterConn(conn2)
+	loop.Serve()
+}
+```
+
 ## 主要概念
 
 ### 回调接口
