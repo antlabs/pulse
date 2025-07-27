@@ -77,7 +77,7 @@ func (loop *ClientEventLoop) createConn(fd int, safeConns *core.SafeConns[Conn],
 	return newConn(
 		fd,
 		safeConns,
-		nil, // 客户端模式不需要任务池
+		loop.MultiEventLoop.localTask,
 		TaskTypeInEventLoop,
 		eventLoop,
 		loop.MultiEventLoop.options.eventLoopReadBufferSize,
