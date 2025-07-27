@@ -2,8 +2,8 @@ package pulse
 
 import (
 	"context"
+	"fmt"
 	"net"
-	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -11,53 +11,82 @@ import (
 )
 
 type ClientEventLoop struct {
-	pollers  []core.PollingApi
-	conns    []*core.SafeConns[Conn]
-	callback Callback
-	options  Options
-	next     uint32 // 用于轮询分配
-	ctx      context.Context
+	*MultiEventLoop
+	next     uint32                // 轮询计数器
+	conns    *core.SafeConns[Conn] // 每个事件循环的连接管理器
+	callback Callback              // 回调函数
+	ctx      context.Context       // 上下文
 }
 
 func NewClientEventLoop(ctx context.Context, opts ...func(*Options)) *ClientEventLoop {
-	var options Options
-	for _, opt := range opts {
-		opt(&options)
+	multiLoop, err := NewMultiEventLoop(ctx, opts...)
+	if err != nil {
+		panic(err)
 	}
-	n := runtime.NumCPU()
-	pollers := make([]core.PollingApi, n)
-	conns := make([]*core.SafeConns[Conn], n)
-	for i := 0; i < n; i++ {
-		pollers[i], _ = core.Create(core.TriggerTypeEdge)
-		conns[i] = &core.SafeConns[Conn]{}
-		conns[i].Init(core.GetMaxFd())
-	}
+
+	// 初始化连接管理器
+	conns := core.SafeConns[Conn]{}
+	conns.Init(core.GetMaxFd())
+
 	return &ClientEventLoop{
-		pollers:  pollers,
-		conns:    conns,
-		callback: options.callback,
-		options:  options,
-		ctx:      ctx,
+		MultiEventLoop: multiLoop,
+		conns:          &conns,
+		callback:       multiLoop.options.callback,
+		ctx:            ctx,
 	}
 }
 
 func (loop *ClientEventLoop) RegisterConn(conn net.Conn) error {
+	// 1. 获取文件描述符
 	fd, err := core.GetFdFromConn(conn)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get fd from connection: %w", err)
 	}
+
+	// 2. 关闭原始连接（因为我们要使用文件描述符）
 	if err := conn.Close(); err != nil {
-		return err
+		return fmt.Errorf("failed to close original connection: %w", err)
 	}
-	idx := atomic.AddUint32(&loop.next, 1) % uint32(len(loop.pollers))
-	c := newConn(fd, loop.conns[idx], nil, TaskTypeInEventLoop, loop.pollers[idx], 4096, false)
-	loop.conns[idx].Add(fd, c)
-	loop.callback.OnOpen(c)
-	return loop.pollers[idx].AddRead(fd)
+
+	// 3. 选择事件循环（轮询分配）
+	eventLoopIndex := loop.selectEventLoop()
+	eventLoop := loop.MultiEventLoop.eventLoops[eventLoopIndex]
+
+	// 4. 创建新连接
+	connInstance := loop.createConn(fd, loop.conns, eventLoop)
+
+	// 5. 添加到连接管理器
+	loop.conns.Add(fd, connInstance)
+
+	// 6. 调用回调函数
+	if loop.callback != nil {
+		loop.callback.OnOpen(connInstance)
+	}
+
+	// 7. 添加到事件循环
+	return eventLoop.AddRead(fd)
+}
+
+// selectEventLoop 选择事件循环（轮询分配）
+func (loop *ClientEventLoop) selectEventLoop() int {
+	return int(atomic.AddUint32(&loop.next, 1) % uint32(len(loop.MultiEventLoop.eventLoops)))
+}
+
+// createConn 创建连接实例
+func (loop *ClientEventLoop) createConn(fd int, safeConns *core.SafeConns[Conn], eventLoop core.PollingApi) *Conn {
+	return newConn(
+		fd,
+		safeConns,
+		nil, // 客户端模式不需要任务池
+		TaskTypeInEventLoop,
+		eventLoop,
+		loop.MultiEventLoop.options.eventLoopReadBufferSize,
+		loop.MultiEventLoop.options.flowBackPressureRemoveRead,
+	)
 }
 
 func (loop *ClientEventLoop) Serve() {
-	n := len(loop.pollers)
+	n := len(loop.MultiEventLoop.eventLoops)
 	var wg sync.WaitGroup
 	wg.Add(n)
 	defer wg.Wait()
@@ -65,19 +94,21 @@ func (loop *ClientEventLoop) Serve() {
 	for i := 0; i < n; i++ {
 		go func(idx int) {
 			defer wg.Done()
-			buf := make([]byte, loop.options.eventLoopReadBufferSize)
+			buf := make([]byte, loop.MultiEventLoop.options.eventLoopReadBufferSize)
 			for {
 				select {
 				case <-loop.ctx.Done():
 					return
 				default:
 				}
-				_, err := loop.pollers[idx].Poll(0, func(fd int, state core.State, pollErr error) {
-					c := loop.conns[idx].GetUnsafe(fd)
+				_, err := loop.MultiEventLoop.eventLoops[idx].Poll(0, func(fd int, state core.State, pollErr error) {
+					c := loop.conns.GetUnsafe(fd)
 					if pollErr != nil {
 						if c != nil {
 							c.Close()
-							loop.callback.OnClose(c, pollErr)
+							if loop.callback != nil {
+								loop.callback.OnClose(c, pollErr)
+							}
 						}
 						return
 					}
@@ -90,15 +121,21 @@ func (loop *ClientEventLoop) Serve() {
 						c.mu.Unlock()
 						if err != nil {
 							c.Close()
-							loop.callback.OnClose(c, err)
+							if loop.callback != nil {
+								loop.callback.OnClose(c, err)
+							}
 							return
 						}
 						if n == 0 {
 							c.Close()
-							loop.callback.OnClose(c, nil)
+							if loop.callback != nil {
+								loop.callback.OnClose(c, nil)
+							}
 							return
 						}
-						loop.callback.OnData(c, buf[:n])
+						if loop.callback != nil {
+							loop.callback.OnData(c, buf[:n])
+						}
 					}
 				})
 				if err != nil {
