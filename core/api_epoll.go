@@ -19,6 +19,7 @@ package core
 
 import (
 	"errors"
+	"os"
 	"io"
 	"log/slog"
 	"syscall"
@@ -63,6 +64,12 @@ type eventPollState struct {
 	drEv    int // delete read event
 	dwEv    int // delete write event
 	resetEv int
+
+	// waiter 让等待 park 在 runtime 的 poller 上而不是阻塞在 syscall 里,
+	// 见 waiter_linux.go。别的平台为 nil, 走阻塞式。
+	waiter *epollWaiter
+	// waitParked 关掉 waiter, 退回 syscall.EpollWait。
+	waitParked bool
 }
 
 func getReadWriteDeleteReset(et bool) (int, int, int, int, int) {
@@ -82,6 +89,7 @@ func Create(triggerType TriggerType) (la PollingApi, err error) {
 	}
 
 	slog.Info("create epoll", "triggerType", triggerType)
+	e.waiter = newEpollWaiter(e.epfd)
 	e.events = make([]syscall.EpollEvent, 1024)
 	e.rev, e.wev, e.drEv, e.dwEv, e.resetEv = getReadWriteDeleteReset(triggerType == TriggerTypeEdge)
 	return &e, nil
@@ -89,6 +97,8 @@ func Create(triggerType TriggerType) (la PollingApi, err error) {
 
 // 释放
 func (e *eventPollState) Free() {
+	// waiter 持有 epoll fd 的一份 dup, 先放掉它再关自己的。
+	e.waiter.close()
 	if err := syscall.Close(e.epfd); err != nil {
 		// Log the error but don't panic as this is a cleanup function
 		slog.Warn("failed to close epoll fd", "error", err)
@@ -156,6 +166,9 @@ func (e *eventPollState) Del(fd int) error {
 	return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_DEL, fd, &syscall.EpollEvent{Fd: int32(fd)})
 }
 
+// noPark 从 PULSE_NO_PARK 读一次, 关掉 park, 见 Poll。
+var noPark = os.Getenv("PULSE_NO_PARK") != ""
+
 // 事件循环
 func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err error)) (numEvents int, err error) {
 	msec := -1
@@ -163,7 +176,25 @@ func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err
 		msec = int(tv) / int(time.Millisecond)
 	}
 
-	numEvents, err = syscall.EpollWait(e.epfd, e.events, msec)
+	// park 在 runtime 的 poller 上等, 还是阻塞在 epoll_wait 里。
+	//
+	// 阻塞在 syscall 里会一直占着 P, 直到 runtime 的监控线程把 P 抢走,
+	// 而排在这个 P 上的 goroutine 这段时间全在等; park 则是一瞬间就把
+	// P 交出去, fd 可读了 runtime 再唤醒它。见 waiter_linux.go。
+	//
+	// 长超时也走 park: 调用方给的那点超时是兜底, 它要的是"fd 可读时
+	// 立刻回来", runtime 的 poller 正好是这个语义。短超时(下面这个
+	// 门槛以内)才留给阻塞式, 那种调用是真的要按时返回。
+	//
+	// PULSE_NO_PARK 关掉它, 退回阻塞 epoll_wait, 用于对照两者。
+	const parkAbove = time.Second
+	usePark := e.waiter != nil && !e.waitParked && !noPark &&
+		(tv <= 0 || tv >= parkAbove)
+	if usePark {
+		numEvents, err = e.waiter.wait(e.epfd, e.events)
+	} else {
+		numEvents, err = syscall.EpollWait(e.epfd, e.events, msec)
+	}
 	if err != nil {
 		if errors.Is(err, syscall.EINTR) {
 			return 0, nil
