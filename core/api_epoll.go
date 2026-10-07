@@ -19,11 +19,12 @@ package core
 
 import (
 	"errors"
-	"os"
 	"io"
 	"log/slog"
+	"os"
 	"syscall"
 	"time"
+	"unsafe"
 )
 
 const (
@@ -108,7 +109,7 @@ func (e *eventPollState) Free() {
 // 新加读事件
 func (e *eventPollState) AddRead(fd int) error {
 	if e.rev > 0 && fd >= 0 {
-		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{
+		return epollCtlRaw(e.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
 			Events: uint32(e.rev),
 		})
@@ -119,7 +120,7 @@ func (e *eventPollState) AddRead(fd int) error {
 // 新加写事件
 func (e *eventPollState) AddWrite(fd int) error {
 	if e.wev > 0 && fd >= 0 {
-		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
+		return epollCtlRaw(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
 			Events: uint32(e.wev),
 		})
@@ -130,7 +131,7 @@ func (e *eventPollState) AddWrite(fd int) error {
 
 func (e *eventPollState) ResetRead(fd int) error {
 	if e.resetEv > 0 && fd >= 0 {
-		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
+		return epollCtlRaw(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
 			Events: uint32(e.resetEv),
 		})
@@ -141,7 +142,7 @@ func (e *eventPollState) ResetRead(fd int) error {
 // 删除写事件
 func (e *eventPollState) DelWrite(fd int) error {
 	if e.dwEv > 0 {
-		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
+		return epollCtlRaw(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
 			Events: uint32(e.dwEv),
 		})
@@ -153,7 +154,7 @@ func (e *eventPollState) DelWrite(fd int) error {
 func (e *eventPollState) DelRead(fd int) error {
 	if fd > 0 {
 		// 移除读事件，只保留写事件
-		return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
+		return epollCtlRaw(e.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
 			Events: uint32(syscall.EPOLLOUT),
 		})
@@ -163,7 +164,7 @@ func (e *eventPollState) DelRead(fd int) error {
 
 // 删除事件
 func (e *eventPollState) Del(fd int) error {
-	return syscall.EpollCtl(e.epfd, syscall.EPOLL_CTL_DEL, fd, &syscall.EpollEvent{Fd: int32(fd)})
+	return epollCtlRaw(e.epfd, syscall.EPOLL_CTL_DEL, fd, &syscall.EpollEvent{Fd: int32(fd)})
 }
 
 // noPark 从 PULSE_NO_PARK 读一次, 关掉 park, 见 Poll。
@@ -193,7 +194,11 @@ func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err
 	if usePark {
 		numEvents, err = e.waiter.wait(e.epfd, e.events)
 	} else {
-		numEvents, err = syscall.EpollWait(e.epfd, e.events, msec)
+		// 非 park 那条也用 RawSyscall6: syscall.EpollWait 走的是 Syscall6,
+		// 多一对 entersyscall/exitsyscall。带超时的 epoll_wait 确实会睡,
+		// 但那段时间本来就不占 CPU 记账, 而进出两次 runtime 调用是实打实
+		// 的 (实测事件循环等待路径占 6.6% CPU)。
+		numEvents, err = epollWaitRaw(e.epfd, e.events, msec)
 	}
 	if err != nil {
 		if errors.Is(err, syscall.EINTR) {
@@ -229,4 +234,21 @@ func (e *eventPollState) Poll(tv time.Duration, cb func(fd int, state State, err
 
 func (e *eventPollState) Name() string {
 	return "epoll"
+}
+
+// epollCtlRaw 是 RawSyscall6 版的 epoll_ctl。
+//
+// syscall.EpollCtl 走 Syscall6(带 entersyscall/exitsyscall), 而 epoll_ctl
+// 不会阻塞——不需要把那对调用付在建连/改事件这种每次连接都要做的操作上。
+//
+// 只有 epoll_wait 是可能阻塞的, 那个的快速路径改了(见 waiter_linux.go),
+// 阻塞等待仍走 runtime 的 park。
+func epollCtlRaw(epfd, op, fd int, ev *syscall.EpollEvent) error {
+	_, _, errno := syscall.RawSyscall6(syscall.SYS_EPOLL_CTL,
+		uintptr(epfd), uintptr(op), uintptr(fd),
+		uintptr(unsafe.Pointer(ev)), 0, 0)
+	if errno != 0 {
+		return errno
+	}
+	return nil
 }
